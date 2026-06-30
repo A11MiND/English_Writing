@@ -1,0 +1,205 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-english_ai_writing}
+      POSTGRES_USER: ${POSTGRES_USER:-english_ai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-english_ai_password}
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - redis-data:/data
+
+  grammar-service:
+    image: erikvl87/languagetool:latest
+    ports:
+      - "8010:8010"
+
+  auth:
+    build:
+      context: .
+      dockerfile: infra/docker/auth.Dockerfile
+    env_file:
+      - .env
+    environment:
+      OPENAUTH_CLIENT_ID: ${OPENAUTH_CLIENT_ID:-english-ai-writing-web}
+      OPENAUTH_CLIENT_SECRET: ${OPENAUTH_CLIENT_SECRET:-local-dev-client-secret}
+      OPENAUTH_SIGNING_SECRET: ${OPENAUTH_SIGNING_SECRET:-local-dev-signing-secret}
+      OPENAUTH_USERS_JSON_FILE: ${OPENAUTH_USERS_JSON_FILE:-}
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./apps/auth:/app/apps/auth
+      - ./tests/fixtures/uat:/app/tests/fixtures/uat:ro
+    working_dir: /app
+    command: ["uvicorn", "auth_service.main:app", "--app-dir", "/app/apps/auth", "--host", "0.0.0.0", "--port", "9000", "--reload"]
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://english_ai:english_ai_password@postgres:5432/english_ai_writing}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      OPENAUTH_TOKEN_URL: ${OPENAUTH_TOKEN_URL:-http://auth:9000/oauth/token}
+      OPENAUTH_USERINFO_URL: ${OPENAUTH_USERINFO_URL:-http://auth:9000/userinfo}
+      OPENAUTH_CLIENT_ID: ${OPENAUTH_CLIENT_ID:-english-ai-writing-web}
+      OPENAUTH_CLIENT_SECRET: ${OPENAUTH_CLIENT_SECRET:-local-dev-client-secret}
+      GRAMMAR_PROVIDER: ${GRAMMAR_PROVIDER:-languagetool}
+      GRAMMAR_SERVICE_URL: ${GRAMMAR_SERVICE_URL:-http://grammar-service:8010}
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000},http://web-e2e:3000
+      PYTHONPATH: /app/apps/api
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth:
+        condition: service_started
+      grammar-service:
+        condition: service_started
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./infra/migrations:/app/infra/migrations
+      - ./alembic.ini:/app/alembic.ini
+      - ./pytest.ini:/app/pytest.ini
+    working_dir: /app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  marking-worker:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://english_ai:english_ai_password@postgres:5432/english_ai_writing}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      OPENAUTH_TOKEN_URL: ${OPENAUTH_TOKEN_URL:-http://auth:9000/oauth/token}
+      OPENAUTH_USERINFO_URL: ${OPENAUTH_USERINFO_URL:-http://auth:9000/userinfo}
+      OPENAUTH_CLIENT_ID: ${OPENAUTH_CLIENT_ID:-english-ai-writing-web}
+      OPENAUTH_CLIENT_SECRET: ${OPENAUTH_CLIENT_SECRET:-local-dev-client-secret}
+      GRAMMAR_PROVIDER: ${GRAMMAR_PROVIDER:-languagetool}
+      GRAMMAR_SERVICE_URL: ${GRAMMAR_SERVICE_URL:-http://grammar-service:8010}
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000},http://web-e2e:3000
+      PYTHONPATH: /app/apps/api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth:
+        condition: service_started
+      grammar-service:
+        condition: service_started
+    volumes:
+      - ./apps/api:/app/apps/api
+      - ./infra/migrations:/app/infra/migrations
+      - ./alembic.ini:/app/alembic.ini
+      - ./pytest.ini:/app/pytest.ini
+    working_dir: /app
+    command: ["python", "-m", "app.workers.marking_worker"]
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/web.Dockerfile
+    env_file:
+      - .env
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./packages/shared:/app/packages/shared
+      - ./package.json:/app/package.json
+      - ./pnpm-lock.yaml:/app/pnpm-lock.yaml
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml
+      - web-next-cache:/app/apps/web/.next
+      - web-root-node-modules:/app/node_modules
+      - web-app-node-modules:/app/apps/web/node_modules
+      - shared-node-modules:/app/packages/shared/node_modules
+    command: ["pnpm", "--filter", "@english-ai-writing/web", "dev", "--hostname", "0.0.0.0"]
+
+  web-e2e:
+    profiles: ["e2e"]
+    build:
+      context: .
+      dockerfile: infra/docker/web.Dockerfile
+    env_file:
+      - .env
+    environment:
+      API_PROXY_TARGET: http://api:8000
+      NEXT_PUBLIC_API_BASE_URL: same-origin
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./packages/shared:/app/packages/shared
+      - ./package.json:/app/package.json
+      - ./pnpm-lock.yaml:/app/pnpm-lock.yaml
+      - ./pnpm-workspace.yaml:/app/pnpm-workspace.yaml
+      - web-e2e-next-cache:/app/apps/web/.next
+      - web-e2e-root-node-modules:/app/node_modules
+      - web-e2e-app-node-modules:/app/apps/web/node_modules
+      - web-e2e-shared-node-modules:/app/packages/shared/node_modules
+    command: ["pnpm", "--filter", "@english-ai-writing/web", "dev", "--hostname", "0.0.0.0"]
+
+  e2e:
+    profiles: ["e2e"]
+    build:
+      context: .
+      dockerfile: infra/docker/e2e.Dockerfile
+    environment:
+      E2E_BASE_URL: http://web-e2e:3000
+      E2E_EVIDENCE_DIR: /evidence/2026-06-29
+    depends_on:
+      - web-e2e
+      - api
+    volumes:
+      - ./tests/e2e:/e2e
+      - ./docs/uat-evidence:/evidence
+      - e2e-node-modules:/e2e/node_modules
+    command:
+      [
+        "bash",
+        "-lc",
+        "node -e \"const url=process.env.E2E_BASE_URL; let tries=0; const wait=()=>fetch(url).then(r=>{if(!r.ok) throw new Error(String(r.status));}).catch(e=>{if(++tries>60){console.error(e); process.exit(1);} setTimeout(wait,1000);}); wait();\" && pnpm test",
+      ]
+
+volumes:
+  postgres-data:
+  redis-data:
+  web-next-cache:
+  web-root-node-modules:
+  web-app-node-modules:
+  shared-node-modules:
+  web-e2e-next-cache:
+  web-e2e-root-node-modules:
+  web-e2e-app-node-modules:
+  web-e2e-shared-node-modules:
+  e2e-node-modules:

@@ -1,0 +1,254 @@
+{
+  "created_tasks": [
+    {
+      "assigned_classes": [],
+      "due_at": null,
+      "exam_duration_minutes": null,
+      "genre": "Narrative",
+      "id": "d0875a1b-6df1-4ef2-8a57-a598f998e845",
+      "instruction": "Last weekend, you had a very special experience that you will never forget. Write a story about what happened. In your story, you should:\n- Say when and where the event took place.\n- Describe who was with you and what you did together.\n- Explain what made the experience so memorable.\n- Write about how you felt before, during and after the event.\n\nWrite about 80 to 120 words.",
+      "level": "P4",
+      "mode": "PRACTICE",
+      "rubric_id": "c03cdb9b-b859-4531-92b3-e0cc24d0eb5f",
+      "rubric_title": "UAT P4 School Writing Rubric",
+      "status": "PUBLISHED",
+      "title": "My Unforgettable Weekend",
+      "uat_assignment": {
+        "class_id": "88888888-8888-4888-8888-888888888884",
+        "class_name": "P4A",
+        "id": "2a4bcc71-6b56-4c4d-b4d3-a666de1f0099",
+        "task_id": "d0875a1b-6df1-4ef2-8a57-a598f998e845"
+      },
+      "word_maximum": 120,
+      "word_minimum": 80
+    },
+    {
+      "assigned_classes": [],
+      "due_at": null,
+      "exam_duration_minutes": null,
+      "genre": "Letter",
+      "id": "401223d5-2cfe-481a-b3ea-d7fcf1d23629",
+      "instruction": "Your cousin in the United Kingdom has just started Primary 4. Write a friendly letter to tell him or her about your school life in Hong Kong. In your letter, you should:\n- Greet your cousin and ask about his or her school.\n- Tell your cousin about your favourite subject and why you like it.\n- Describe a fun activity you did during recess.\n- Invite your cousin to visit Hong Kong one day.\n\nWrite about 80 to 120 words. Use a proper letter format with a date, greeting, body and closing.",
+      "level": "P4",
+      "mode": "PRACTICE",
+      "rubric_id": "c03cdb9b-b859-4531-92b3-e0cc24d0eb5f",
+      "rubric_title": "UAT P4 School Writing Rubric",
+      "status": "PUBLISHED",
+      "title": "A Letter to My Cousin",
+      "uat_assignment": {
+        "class_id": "88888888-8888-4888-8888-888888888884",
+        "class_name": "P4A",
+        "id": "835d57c0-b2b5-4ebc-8333-41b327bbd639",
+        "task_id": "401223d5-2cfe-481a-b3ea-d7fcf1d23629"
+      },
+      "word_maximum": 120,
+      "word_minimum": 80
+    },
+    {
+      "assigned_classes": [],
+      "due_at": null,
+      "exam_duration_minutes": 30,
+      "genre": "Descriptive",
+      "id": "712c8df3-8dcf-450c-8f90-9e29792c158d",
+      "instruction": "Everyone has a favourite place in Hong Kong. It could be a park, a beach, a market or a shop. Write a description of your favourite place. You should:\n- Name the place and say where it is.\n- Describe what you can see, hear and smell there.\n- Explain what you like to do at this place.\n- Say why this place is special to you and your family.\n\nWrite about 80 to 120 words.",
+      "level": "P4",
+      "mode": "EXAM",
+      "rubric_id": "c03cdb9b-b859-4531-92b3-e0cc24d0eb5f",
+      "rubric_title": "UAT P4 School Writing Rubric",
+      "status": "PUBLISHED",
+      "title": "My Favourite Place in Hong Kong",
+      "uat_assignment": {
+        "class_id": "88888888-8888-4888-8888-888888888884",
+        "class_name": "P4A",
+        "id": "8feb122c-ba27-4ab8-ad1d-4647c83eba15",
+        "task_id": "712c8df3-8dcf-450c-8f90-9e29792c158d"
+      },
+      "word_maximum": 120,
+      "word_minimum": 80
+    },
+    {
+      "assigned_classes": [],
+      "due_at": null,
+      "exam_duration_minutes": 30,
+      "genre": "Narrative",
+      "id": "055531ad-63c8-445f-920b-b49d83a56164",
+      "instruction": "Imagine that one day you got lost on your way home from school. Write a story about this experience. You should:\n- Describe where you were and how you got lost.\n- Say what you did to try to find your way.\n- Tell the story about who helped you in the end.\n- Explain how you felt during the experience and what you learned from it.\n\nWrite about 80 to 120 words.",
+      "level": "P4",
+      "mode": "EXAM",
+      "rubric_id": "c03cdb9b-b859-4531-92b3-e0cc24d0eb5f",
+      "rubric_title": "UAT P4 School Writing Rubric",
+      "status": "PUBLISHED",
+      "title": "The Day I Got Lost",
+      "uat_assignment": {
+        "class_id": "88888888-8888-4888-8888-888888888884",
+        "class_name": "P4A",
+        "id": "11d97e88-eaa4-48a6-8f83-21654b395b26",
+        "task_id": "055531ad-63c8-445f-920b-b49d83a56164"
+      },
+      "word_maximum": 120,
+      "word_minimum": 80
+    },
+    {
+      "assigned_classes": [],
+      "due_at": null,
+      "exam_duration_minutes": null,
+      "genre": "Blog Post",
+      "id": "564bde26-aeeb-4834-9933-7df62fda20f3",
+      "instruction": "Your English teacher has asked you to write a blog post for the class website about your favourite hobby. In your blog post, you should:\n- Give your blog post a catchy title.\n- Introduce the hobby and say when you started doing it.\n- Describe what you need for the hobby and where you usually do it.\n- Explain why you enjoy the hobby and what you have learned from it.\n- Encourage your readers to try a new hobby.\n\nWrite about 120 to 160 words.",
+      "level": "P5",
+      "mode": "PRACTICE",
+      "rubric_id": "b16213ea-9a08-46a6-8ca6-96dc6737d44f",
+      "rubric_title": "UAT P5 School Writing Rubric",
+      "status": "PUBLISHED",
+      "title": "A Blog Post About My Hobby",
+      "uat_assignment": {
+        "class_id": "88888888-8888-4888-8888-888888888885",
+        "class_name": "P5A",
+        "id": "127a0279-ef9b-4902-a557-4b241e1420da",
+        "task_id": "564bde26-aeeb-4834-9933-7df62fda20f3"
+      },
+      "word_maximum": 160,
+      "word_minimum": 120
+    },
+    {
+      "assigned_classes": [],
+      "due_at": null,
+      "exam_duration_minutes": 45,
+      "genre": "Email",
+      "id": "ddfdf2b1-cb37-4526-9813-44bf9d8c6a35",
+      "instruction": "You have made a new friend called Amelia from Sydney, Australia through a school pen-pal programme. Write an email to introduce yourself. You should:\n- Start with a friendly greeting and a short opening.\n- Tell Amelia about yourself, your family and your school life in Hong Kong.\n- Describe what you like to do after school and at weekends.\n- Ask Amelia some questions about life in Sydney.\n- End the email in a friendly way.\n\nWrite about 120 to 160 words. Use a proper email format with a subject line, greeting and sign-off.",
+      "level": "P5",
+      "mode": "EXAM",
+      "rubric_id": "b16213ea-9a08-46a6-8ca6-96dc6737d44f",
+      "rubric_title": "UAT P5 School Writing Rubric",
+      "status": "PUBLISHED",
+      "title": "Email to a New Friend from Sydney",
+      "uat_assignment": {
+        "class_id": "88888888-8888-4888-8888-888888888885",
+        "class_name": "P5A",
+        "id": "0ded7064-d810-4ad0-a5e7-379a86ad2cbf",
+        "task_id": "ddfdf2b1-cb37-4526-9813-44bf9d8c6a35"
+      },
+      "word_maximum": 160,
+      "word_minimum": 120
+    },
+    {
+      "assigned_classes": [],
+      "due_at": null,
+      "exam_duration_minutes": 45,
+      "genre": "Story",
+      "id": "45532342-441d-450c-826c-abef8813ecfd",
+      "instruction": "On your birthday, you received a strange wrapped gift with no name on it. The gift changed your life in an unexpected way. Write a story about what happened. You should:\n- Describe the gift and how you felt when you opened it.\n- Explain what was special or mysterious about the gift.\n- Tell the story of how the gift led you on an adventure or taught you something important.\n- Describe how the experience changed you.\n\nWrite about 120 to 160 words.",
+      "level": "P5",
+      "mode": "EXAM",
+      "rubric_id": "b16213ea-9a08-46a6-8ca6-96dc6737d44f",
+      "rubric_title": "UAT P5 School Writing Rubric",
+      "status": "PUBLISHED",
+      "title": "The Mysterious Gift",
+      "uat_assignment": {
+        "class_id": "88888888-8888-4888-8888-888888888885",
+        "class_name": "P5A",
+        "id": "848752a6-6592-451c-b16f-feb95e4b326b",
+        "task_id": "45532342-441d-450c-826c-abef8813ecfd"
+      },
+      "word_maximum": 160,
+      "word_minimum": 120
+    },
+    {
+      "assigned_classes": [],
+      "due_at": null,
+      "exam_duration_minutes": null,
+      "genre": "Report",
+      "id": "0c3c4554-89cb-4460-9e93-5e378698bb10",
+      "instruction": "Your principal wants to improve the school canteen. He has asked you to write a short report based on a survey of your classmates. In your report, you should:\n- Give your report a clear title.\n- Describe the food and drinks that are sold in the canteen.\n- Say what students like and dislike about the canteen.\n- Suggest two or three ways to make the canteen better.\n- Use subheadings to organise your ideas.\n\nWrite about 120 to 160 words.",
+      "level": "P5",
+      "mode": "PRACTICE",
+      "rubric_id": "b16213ea-9a08-46a6-8ca6-96dc6737d44f",
+      "rubric_title": "UAT P5 School Writing Rubric",
+      "status": "PUBLISHED",
+      "title": "A Report About the School Canteen",
+      "uat_assignment": {
+        "class_id": "88888888-8888-4888-8888-888888888885",
+        "class_name": "P5A",
+        "id": "b98801d3-fd86-43c7-a970-9ffb58019a9c",
+        "task_id": "0c3c4554-89cb-4460-9e93-5e378698bb10"
+      },
+      "word_maximum": 160,
+      "word_minimum": 120
+    },
+    {
+      "assigned_classes": [],
+      "due_at": null,
+      "exam_duration_minutes": 60,
+      "genre": "Speech",
+      "id": "c33d9b3b-727c-4a30-8e63-2014315a7e3a",
+      "instruction": "Your school is holding an assembly about caring for the environment. You have been chosen to give a short speech on why we should protect our oceans. In your speech, you should:\n- Greet the audience and introduce your topic.\n- Explain why the oceans are important to people, animals and the planet.\n- Give one or two examples of problems the oceans are facing, such as plastic pollution.\n- Suggest what students can do to help protect the oceans.\n- End your speech with a strong message that the audience will remember.\n\nWrite about 160 to 200 words. Use an engaging tone suitable for a school speech.",
+      "level": "P6",
+      "mode": "EXAM",
+      "rubric_id": "2575b6d3-2172-497a-b62d-2fbfec13930d",
+      "rubric_title": "UAT P6 School Writing Rubric",
+      "status": "PUBLISHED",
+      "title": "Speech: Why We Should Protect Our Oceans",
+      "uat_assignment": {
+        "class_id": "88888888-8888-4888-8888-888888888886",
+        "class_name": "P6A",
+        "id": "426d3206-e829-4236-ac1f-0277aa3a6b4a",
+        "task_id": "c33d9b3b-727c-4a30-8e63-2014315a7e3a"
+      },
+      "word_maximum": 200,
+      "word_minimum": 160
+    },
+    {
+      "assigned_classes": [],
+      "due_at": null,
+      "exam_duration_minutes": 60,
+      "genre": "Narrative",
+      "id": "9a659caf-db65-4ce3-9319-7aaf350fda64",
+      "instruction": "Imagine that one day you found an old object in your grandmother's attic and it magically took you back in time to Hong Kong in the 1960s. Write a story about your adventure. You should:\n- Describe the object you found and how the time travel happened.\n- Tell the reader what Hong Kong looked like in the past and what you saw.\n- Describe a person you met and what you learned from him or her.\n- Explain how you returned to the present and how the experience changed the way you think about your family.\n\nWrite about 160 to 200 words.",
+      "level": "P6",
+      "mode": "EXAM",
+      "rubric_id": "2575b6d3-2172-497a-b62d-2fbfec13930d",
+      "rubric_title": "UAT P6 School Writing Rubric",
+      "status": "PUBLISHED",
+      "title": "A Journey to the Past",
+      "uat_assignment": {
+        "class_id": "88888888-8888-4888-8888-888888888886",
+        "class_name": "P6A",
+        "id": "13ee6c65-bce6-43a1-acde-e524b33b0bb4",
+        "task_id": "9a659caf-db65-4ce3-9319-7aaf350fda64"
+      },
+      "word_maximum": 200,
+      "word_minimum": 160
+    },
+    {
+      "assigned_classes": [],
+      "due_at": null,
+      "exam_duration_minutes": null,
+      "genre": "Leaflet",
+      "id": "c86a8f0c-155b-4c4f-aa9b-03477ecbbe5d",
+      "instruction": "Your school is holding an Open Day for parents and younger children. Design a colourful leaflet to welcome visitors and tell them what they can see and do. Your leaflet should include:\n- A catchy title and a short welcome message.\n- Information about the date, time and location of the Open Day.\n- A list of interesting activities, such as music performances, science experiments or games.\n- A short description of two clubs or teams that visitors can join.\n- A friendly closing line that invites visitors to come.\n\nWrite about 160 to 200 words. Use short sections, bullet points and subheadings to make the leaflet easy to read.",
+      "level": "P6",
+      "mode": "PRACTICE",
+      "rubric_id": "2575b6d3-2172-497a-b62d-2fbfec13930d",
+      "rubric_title": "UAT P6 School Writing Rubric",
+      "status": "PUBLISHED",
+      "title": "Leaflet for Our School Open Day",
+      "uat_assignment": {
+        "class_id": "88888888-8888-4888-8888-888888888886",
+        "class_name": "P6A",
+        "id": "ce34d1b7-a31e-49e6-9aa2-c07fe9198d33",
+        "task_id": "c86a8f0c-155b-4c4f-aa9b-03477ecbbe5d"
+      },
+      "word_maximum": 200,
+      "word_minimum": 160
+    }
+  ],
+  "reused_tasks": [],
+  "rubric_ids_by_level": {
+    "P4": "c03cdb9b-b859-4531-92b3-e0cc24d0eb5f",
+    "P5": "b16213ea-9a08-46a6-8ca6-96dc6737d44f",
+    "P6": "2575b6d3-2172-497a-b62d-2fbfec13930d"
+  },
+  "skipped_topics": [],
+  "source": "tests/fixtures/uat/minimax/writing-fixtures.json"
+}

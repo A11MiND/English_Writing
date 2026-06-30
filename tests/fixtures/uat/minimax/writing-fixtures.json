@@ -1,0 +1,119 @@
+{
+  "generated_at_epoch": 1782716323,
+  "model": "MiniMax-M3",
+  "provider": "minimax",
+  "sample_essays": [],
+  "student_count": 470,
+  "writing_topics": [
+    {
+      "exam_duration_minutes": null,
+      "genre": "Narrative",
+      "instruction": "Last weekend, you had a very special experience that you will never forget. Write a story about what happened. In your story, you should:\n- Say when and where the event took place.\n- Describe who was with you and what you did together.\n- Explain what made the experience so memorable.\n- Write about how you felt before, during and after the event.\n\nWrite about 80 to 120 words.",
+      "level": "P4",
+      "mode": "PRACTICE",
+      "topic_title": "My Unforgettable Weekend",
+      "word_maximum": 120,
+      "word_minimum": 80
+    },
+    {
+      "exam_duration_minutes": null,
+      "genre": "Letter",
+      "instruction": "Your cousin in the United Kingdom has just started Primary 4. Write a friendly letter to tell him or her about your school life in Hong Kong. In your letter, you should:\n- Greet your cousin and ask about his or her school.\n- Tell your cousin about your favourite subject and why you like it.\n- Describe a fun activity you did during recess.\n- Invite your cousin to visit Hong Kong one day.\n\nWrite about 80 to 120 words. Use a proper letter format with a date, greeting, body and closing.",
+      "level": "P4",
+      "mode": "PRACTICE",
+      "topic_title": "A Letter to My Cousin",
+      "word_maximum": 120,
+      "word_minimum": 80
+    },
+    {
+      "exam_duration_minutes": 30,
+      "genre": "Descriptive",
+      "instruction": "Everyone has a favourite place in Hong Kong. It could be a park, a beach, a market or a shop. Write a description of your favourite place. You should:\n- Name the place and say where it is.\n- Describe what you can see, hear and smell there.\n- Explain what you like to do at this place.\n- Say why this place is special to you and your family.\n\nWrite about 80 to 120 words.",
+      "level": "P4",
+      "mode": "EXAM",
+      "topic_title": "My Favourite Place in Hong Kong",
+      "word_maximum": 120,
+      "word_minimum": 80
+    },
+    {
+      "exam_duration_minutes": 30,
+      "genre": "Narrative",
+      "instruction": "Imagine that one day you got lost on your way home from school. Write a story about this experience. You should:\n- Describe where you were and how you got lost.\n- Say what you did to try to find your way.\n- Tell the story about who helped you in the end.\n- Explain how you felt during the experience and what you learned from it.\n\nWrite about 80 to 120 words.",
+      "level": "P4",
+      "mode": "EXAM",
+      "topic_title": "The Day I Got Lost",
+      "word_maximum": 120,
+      "word_minimum": 80
+    },
+    {
+      "exam_duration_minutes": null,
+      "genre": "Blog Post",
+      "instruction": "Your English teacher has asked you to write a blog post for the class website about your favourite hobby. In your blog post, you should:\n- Give your blog post a catchy title.\n- Introduce the hobby and say when you started doing it.\n- Describe what you need for the hobby and where you usually do it.\n- Explain why you enjoy the hobby and what you have learned from it.\n- Encourage your readers to try a new hobby.\n\nWrite about 120 to 160 words.",
+      "level": "P5",
+      "mode": "PRACTICE",
+      "topic_title": "A Blog Post About My Hobby",
+      "word_maximum": 160,
+      "word_minimum": 120
+    },
+    {
+      "exam_duration_minutes": 45,
+      "genre": "Email",
+      "instruction": "You have made a new friend called Amelia from Sydney, Australia through a school pen-pal programme. Write an email to introduce yourself. You should:\n- Start with a friendly greeting and a short opening.\n- Tell Amelia about yourself, your family and your school life in Hong Kong.\n- Describe what you like to do after school and at weekends.\n- Ask Amelia some questions about life in Sydney.\n- End the email in a friendly way.\n\nWrite about 120 to 160 words. Use a proper email format with a subject line, greeting and sign-off.",
+      "level": "P5",
+      "mode": "EXAM",
+      "topic_title": "Email to a New Friend from Sydney",
+      "word_maximum": 160,
+      "word_minimum": 120
+    },
+    {
+      "exam_duration_minutes": 45,
+      "genre": "Story",
+      "instruction": "On your birthday, you received a strange wrapped gift with no name on it. The gift changed your life in an unexpected way. Write a story about what happened. You should:\n- Describe the gift and how you felt when you opened it.\n- Explain what was special or mysterious about the gift.\n- Tell the story of how the gift led you on an adventure or taught you something important.\n- Describe how the experience changed you.\n\nWrite about 120 to 160 words.",
+      "level": "P5",
+      "mode": "EXAM",
+      "topic_title": "The Mysterious Gift",
+      "word_maximum": 160,
+      "word_minimum": 120
+    },
+    {
+      "exam_duration_minutes": null,
+      "genre": "Report",
+      "instruction": "Your principal wants to improve the school canteen. He has asked you to write a short report based on a survey of your classmates. In your report, you should:\n- Give your report a clear title.\n- Describe the food and drinks that are sold in the canteen.\n- Say what students like and dislike about the canteen.\n- Suggest two or three ways to make the canteen better.\n- Use subheadings to organise your ideas.\n\nWrite about 120 to 160 words.",
+      "level": "P5",
+      "mode": "PRACTICE",
+      "topic_title": "A Report About the School Canteen",
+      "word_maximum": 160,
+      "word_minimum": 120
+    },
+    {
+      "exam_duration_minutes": 60,
+      "genre": "Speech",
+      "instruction": "Your school is holding an assembly about caring for the environment. You have been chosen to give a short speech on why we should protect our oceans. In your speech, you should:\n- Greet the audience and introduce your topic.\n- Explain why the oceans are important to people, animals and the planet.\n- Give one or two examples of problems the oceans are facing, such as plastic pollution.\n- Suggest what students can do to help protect the oceans.\n- End your speech with a strong message that the audience will remember.\n\nWrite about 160 to 200 words. Use an engaging tone suitable for a school speech.",
+      "level": "P6",
+      "mode": "EXAM",
+      "topic_title": "Speech: Why We Should Protect Our Oceans",
+      "word_maximum": 200,
+      "word_minimum": 160
+    },
+    {
+      "exam_duration_minutes": 60,
+      "genre": "Narrative",
+      "instruction": "Imagine that one day you found an old object in your grandmother's attic and it magically took you back in time to Hong Kong in the 1960s. Write a story about your adventure. You should:\n- Describe the object you found and how the time travel happened.\n- Tell the reader what Hong Kong looked like in the past and what you saw.\n- Describe a person you met and what you learned from him or her.\n- Explain how you returned to the present and how the experience changed the way you think about your family.\n\nWrite about 160 to 200 words.",
+      "level": "P6",
+      "mode": "EXAM",
+      "topic_title": "A Journey to the Past",
+      "word_maximum": 200,
+      "word_minimum": 160
+    },
+    {
+      "exam_duration_minutes": null,
+      "genre": "Leaflet",
+      "instruction": "Your school is holding an Open Day for parents and younger children. Design a colourful leaflet to welcome visitors and tell them what they can see and do. Your leaflet should include:\n- A catchy title and a short welcome message.\n- Information about the date, time and location of the Open Day.\n- A list of interesting activities, such as music performances, science experiments or games.\n- A short description of two clubs or teams that visitors can join.\n- A friendly closing line that invites visitors to come.\n\nWrite about 160 to 200 words. Use short sections, bullet points and subheadings to make the leaflet easy to read.",
+      "level": "P6",
+      "mode": "PRACTICE",
+      "topic_title": "Leaflet for Our School Open Day",
+      "word_maximum": 200,
+      "word_minimum": 160
+    }
+  ]
+}

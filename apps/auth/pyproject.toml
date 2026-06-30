@@ -1,0 +1,31 @@
+[project]
+name = "english-ai-writing-auth"
+version = "0.0.0"
+description = "OpenAuth-compatible auth service for the English AI Writing Platform"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115.0",
+  "pydantic>=2.11.0",
+  "pydantic-settings>=2.9.0",
+  "python-multipart>=0.0.20",
+  "uvicorn[standard]>=0.34.0"
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+  "httpx>=0.28.0",
+  "ruff>=0.11.0"
+]
+
+[build-system]
+requires = ["setuptools>=80.0.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["auth_service*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
