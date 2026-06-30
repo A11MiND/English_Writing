@@ -32,3 +32,14 @@ This file is the visible checkpoint for what is done, what is next, and what evi
 | 3 | Split Teacher dashboard into focused workspaces. | Overview, task/rubric, marking and reports are easier to scan and use. |
 | 4 | Productize Student home and writing editors. | Practice and Exam flows are visually distinct and preserve all current behavior. |
 | 5 | Add UI-focused regression coverage. | Playwright covers the productized navigation and core UAT flows. |
+
+## Migration Checkpoint
+
+2026-06-30:
+
+- Migrated project to `/Users/allmind/Desktop/Edcosys2025/EngWriting`.
+- Initialized local Git repository.
+- Created checkpoint commit `b8b4d17 foundation-uat-api-support-checkpoint`.
+- Verified `.env`, dependency directories and local caches are ignored by Git.
+- Started the migrated Docker Compose stack from the new directory.
+- Ran migrations, backend tests, frontend tests, lint and Playwright E2E successfully from the migrated directory.

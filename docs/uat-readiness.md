@@ -141,6 +141,16 @@ Known evidence limitations after 2026-06-29:
   - `pnpm lint`: passed.
   - `E2E_BASE_URL=http://localhost:3000 E2E_API_BASE_URL=http://localhost:8000 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=<local Chrome for Testing> pnpm --filter @english-ai-writing/e2e test`: passed, 7 passed.
   - Added `used_by_task_count` to teacher rubric list responses, `GET /api/teacher/tasks/{task_id}` for task detail, and `GET /api/teacher/submissions/{submission_id}/exam-events` for assigned-class-scoped Exam Mode audit review.
+- 2026-06-30 EngWriting migration validation:
+  - Project copied to `/Users/allmind/Desktop/Edcosys2025/EngWriting`; source Codex worktree retained.
+  - Local Git repository initialized with checkpoint `b8b4d17 foundation-uat-api-support-checkpoint`.
+  - `.env`, dependency directories and local caches verified as ignored before commit.
+  - Migrated Docker Compose stack started from the new directory after tagging existing local images for the new project name.
+  - `docker compose exec -T api alembic upgrade head`: passed on the migrated stack.
+  - `docker compose exec -T api env RUN_DB_TESTS=1 pytest`: passed, 56 passed / 1 skipped.
+  - `pnpm test`: passed, 14 tests.
+  - `pnpm lint`: passed.
+  - `E2E_BASE_URL=http://localhost:3000 E2E_API_BASE_URL=http://localhost:8000 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=<local Chrome for Testing> pnpm --filter @english-ai-writing/e2e test`: passed, 7 passed.
 - Earlier stress evidence used the seeded student credential repeatedly, but the latest strict evidence file uses 470 distinct generated student credentials.
 - MiniMax fixture generation and generated writing fixture import were executed with the API key supplied through local runtime only. The key was not committed or rendered in UI/evidence.
 - The 470 marking queue stress pass validates queue creation, not full worker drain through the live LLM provider. A 470-essay worker drain test should be explicitly approved as a costed external-provider test.
