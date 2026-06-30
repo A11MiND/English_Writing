@@ -151,6 +151,10 @@ Known evidence limitations after 2026-06-29:
   - `pnpm test`: passed, 14 tests.
   - `pnpm lint`: passed.
   - `E2E_BASE_URL=http://localhost:3000 E2E_API_BASE_URL=http://localhost:8000 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=<local Chrome for Testing> pnpm --filter @english-ai-writing/e2e test`: passed, 7 passed.
+- 2026-06-30 spec alignment checkpoint:
+  - Added `docs/specs/14-requirements-traceability.md` to map PRD, Technical Proposal, spec-driven development and UI/UX requirements against implementation evidence and remaining gaps.
+  - Updated `docs/specs/01-product-scope.md`, `docs/specs/02-architecture.md` and `docs/specs/13-deployment-operations.md` from stale phase baselines to current UAT-core status.
+  - Updated `docs/development-plan.md` so the next visible work items are UI productization, NLP metrics, worker hardening and UI regression coverage.
 - Earlier stress evidence used the seeded student credential repeatedly, but the latest strict evidence file uses 470 distinct generated student credentials.
 - MiniMax fixture generation and generated writing fixture import were executed with the API key supplied through local runtime only. The key was not committed or rendered in UI/evidence.
 - The 470 marking queue stress pass validates queue creation, not full worker drain through the live LLM provider. A 470-essay worker drain test should be explicitly approved as a costed external-provider test.

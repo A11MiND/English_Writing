@@ -9,6 +9,7 @@ This file is the visible checkpoint for what is done, what is next, and what evi
 | Area | Status | Current Evidence | Next Action |
 | --- | --- | --- | --- |
 | Phase 0-8 Core Workflow | Done | API, web and E2E passing evidence in `docs/uat-readiness.md`. | Keep regression green while productizing UI. |
+| Spec / PRD Traceability | Done | `docs/specs/14-requirements-traceability.md` maps PRD, Technical Proposal, spec-driven and UI requirements to current status. | Keep this updated after each implementation batch. |
 | UI API Support | Done | Student task state, dashboard summary, marking filters, rubric count, task detail and exam events are implemented. | Wire these contracts into productized pages. |
 | UI Productization | Doing | Matrix in `docs/design/ui-productization-matrix.md`. Catalyst is the reference style, not copied source. | Build a Catalyst-inspired app shell and page sections. |
 | Security Gate | Doing | School, student and teacher scoping tests exist. | Add more route-level DB tests during UI integration. |
@@ -27,11 +28,12 @@ This file is the visible checkpoint for what is done, what is next, and what evi
 
 | Priority | Work | Success Criteria |
 | --- | --- | --- |
-| 1 | Migrate project to Desktop `EngWriting` and create local Git checkpoint. | Target directory has a clean first commit and `.env` remains untracked. |
-| 2 | Productize shared app shell. | Student, Teacher and Admin pages use one consistent sidebar/topbar layout. |
-| 3 | Split Teacher dashboard into focused workspaces. | Overview, task/rubric, marking and reports are easier to scan and use. |
-| 4 | Productize Student home and writing editors. | Practice and Exam flows are visually distinct and preserve all current behavior. |
-| 5 | Add UI-focused regression coverage. | Playwright covers the productized navigation and core UAT flows. |
+| 1 | Productize shared app shell. | Student, Teacher and Admin pages use one consistent sidebar/topbar layout. |
+| 2 | Split Teacher dashboard into focused workspaces. | Overview, task/rubric, marking and reports are easier to scan and use. |
+| 3 | Productize Student home and writing editors. | Practice and Exam flows are visually distinct and preserve all current behavior. |
+| 4 | Add fuller NLP metrics layer. | Marking pipeline includes readability, lexical and sentence metrics as structured evidence. |
+| 5 | Harden marking worker operations. | Worker has DLQ/backoff/metrics and a clear provider-costed 470-job drain plan. |
+| 6 | Add UI-focused regression coverage. | Playwright covers the productized navigation and core UAT flows. |
 
 ## Migration Checkpoint
 
@@ -43,3 +45,11 @@ This file is the visible checkpoint for what is done, what is next, and what evi
 - Verified `.env`, dependency directories and local caches are ignored by Git.
 - Started the migrated Docker Compose stack from the new directory.
 - Ran migrations, backend tests, frontend tests, lint and Playwright E2E successfully from the migrated directory.
+
+## Spec Alignment Checkpoint
+
+2026-06-30:
+
+- Added `docs/specs/14-requirements-traceability.md`.
+- Updated product scope, architecture and deployment specs to reflect the actual UAT-core implementation state.
+- Confirmed the largest remaining gaps are UI productization, fuller NLP metrics, worker hardening and production operations.
