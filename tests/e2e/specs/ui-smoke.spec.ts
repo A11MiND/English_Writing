@@ -20,12 +20,23 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(widths.scrollWidth).toBeLessThanOrEqual(widths.clientWidth + 2);
 }
 
+async function showAllStudentTasksIfAvailable(page: Page) {
+  await expect(page.getByRole("heading", { name: "Student home" })).toBeVisible();
+  const showAll = page.getByTestId("student-show-all-tasks");
+  if ((await showAll.count()) > 0) {
+    await showAll.first().click();
+  }
+}
+
 test("teacher desktop shell exposes productized navigation and report controls", async ({ page }) => {
   await login(page, teacherEmail);
   await expect(page).toHaveURL(/\/teacher$/);
   await expect(page.locator(".portal-sidebar")).toBeVisible();
   await expect(page.getByRole("link", { name: /Reports/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /Marking/ })).toBeVisible();
+  await expect(page.getByTestId("teacher-workbench-overview")).toBeVisible();
+  await expect(page.getByText("Things to do")).toBeVisible();
+  await page.getByTestId("teacher-workbench-reports").click();
   await expect(page.getByTestId("report-generate")).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
@@ -37,6 +48,7 @@ test("student mobile shell and practice editor avoid horizontal overflow", async
   await expect(page.getByRole("heading", { name: "Student home" })).toBeVisible();
   await expect(page.locator(".mobile-section-nav")).toBeVisible();
   await expectNoHorizontalOverflow(page);
+  await showAllStudentTasksIfAvailable(page);
 
   const practiceTask = page.getByTestId("student-task-practice").first();
   await expect(practiceTask).toBeVisible();

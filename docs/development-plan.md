@@ -11,7 +11,7 @@ This file is the visible checkpoint for what is done, what is next, and what evi
 | Phase 0-8 Core Workflow | Done | API, web and E2E passing evidence in `docs/uat-readiness.md`. | Keep regression green while productizing UI. |
 | Spec / PRD Traceability | Done | `docs/specs/14-requirements-traceability.md` maps PRD, Technical Proposal, spec-driven and UI requirements to current status. | Keep this updated after each implementation batch. |
 | UI API Support | Done | Student task state, dashboard summary, marking filters, rubric count, task detail and exam events are implemented. | Wire these contracts into productized pages. |
-| UI Productization | Doing | Matrix in `docs/design/ui-productization-matrix.md`; shared shell, writing editor, feedback, report visuals, marking details and UI smoke coverage first pass implemented. Catalyst is the reference style, not copied source. | Continue Admin/Teacher table polish and visual QA screenshots. |
+| UI Productization | Doing | Matrices in `docs/design/ui-productization-matrix.md` and `docs/design/page-ia-matrix.md`; first IA refactor started for primary-school teacher/student workflows. Catalyst is the reference style, not copied source. | Continue page IA refactor before visual polish. |
 | Security Gate | Doing | School, student and teacher scoping tests exist. | Add more route-level DB tests during UI integration. |
 | Stress / UAT Evidence | Done for queue/load, partial for worker drain | Evidence under `docs/uat-evidence/`; full 470-essay LLM drain has not been run. | Run full provider-costed worker drain only with approval. |
 | Deployment | Later | Docker Compose local environment is working. | Decide Render, Vercel or other cloud target later. |
@@ -28,9 +28,9 @@ This file is the visible checkpoint for what is done, what is next, and what evi
 
 | Priority | Work | Success Criteria |
 | --- | --- | --- |
-| 1 | Continue Teacher/Admin detail polish. | Forms, tables and review states are easier to scan without changing APIs. |
-| 2 | Visual QA screenshots. | Capture reviewed desktop/mobile screenshots for login, Student, Practice, Exam, Teacher and Admin. |
-| 3 | Mobile QA pass. | Expand phone-width checks to report and marking detail states. |
+| 1 | Finish page IA refactor. | Student, Teacher and Admin pages answer one primary user question before showing secondary tools. |
+| 2 | Continue Teacher/Admin detail polish. | Forms, tables and review states are easier to scan without changing APIs. |
+| 3 | Visual QA screenshots. | Capture reviewed desktop/mobile screenshots for login, Student, Practice, Exam, Teacher and Admin. |
 | 4 | Add fuller NLP metrics layer. | Marking pipeline includes readability, lexical and sentence metrics as structured evidence. |
 | 5 | Harden marking worker operations. | Worker has DLQ/backoff/metrics and a clear provider-costed 470-job drain plan. |
 
@@ -73,3 +73,13 @@ This file is the visible checkpoint for what is done, what is next, and what evi
 - Productized marking review cards with dimension scores, feedback sections, strengths, weaknesses, warning flags, sentence comments and recommended exercises.
 - Added Playwright UI smoke coverage for teacher desktop navigation/report controls, student mobile Practice editor and admin mobile controls.
 - Remaining UI work: Admin/Teacher table polish, visual QA screenshots and deeper mobile checks for report/marking detail states.
+
+## Page IA Refactor Checkpoint
+
+2026-07-01:
+
+- Added `docs/design/page-ia-matrix.md` to make user task, primary action, hidden/secondary content and API needs explicit per page.
+- Adopted primary-school UX constraints: simple wording, fewer steps, teacher efficiency, student low cognitive load, safe feedback and privacy by default.
+- Refactored Student Home from a historical task feed into To do / Teacher feedback / Done work views; the default To do view shows a short list first with `Show all` for the full task list.
+- Refactored Teacher Dashboard from a single long page into task-specific sections: Today, Set writing task, Mark writing, Class progress and Rubrics.
+- Updated visual evidence screenshots: `docs/uat-evidence/screenshots/11-student-home-ia-refactor.png` and `docs/uat-evidence/screenshots/12-teacher-dashboard-ia-refactor.png`.

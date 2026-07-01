@@ -59,6 +59,8 @@ type TaskForm = {
   rubric_id: string;
 };
 
+type TeacherWorkbench = "overview" | "tasks" | "rubrics" | "marking" | "reports";
+
 const defaultDimensions = [
   {
     name: "Content",
@@ -90,6 +92,7 @@ function scorePercent(value: number | null | undefined, maxScore: number) {
 
 export function TeacherDashboard() {
   const [state, setState] = useState<TeacherState>({ status: "loading" });
+  const [activeWorkbench, setActiveWorkbench] = useState<TeacherWorkbench>("overview");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [rubricForm, setRubricForm] = useState({
@@ -400,6 +403,7 @@ export function TeacherDashboard() {
   const publishedTasks = state.tasks.filter((task) => task.status === "PUBLISHED").length;
   const examTasks = state.tasks.filter((task) => task.mode === "EXAM").length;
   const pendingMarking = state.markingItems.filter((item) => item.marking_result?.status !== "AI_MARKED").length;
+  const currentTasks = state.tasks.filter((task) => task.status !== "ARCHIVED").slice(0, 5);
   const reportDistributionMax = classReport
     ? Math.max(1, ...Object.values(classReport.score_distribution))
     : 1;
@@ -424,24 +428,109 @@ export function TeacherDashboard() {
           <p className="metric-hint">{state.classes.map((schoolClass) => schoolClass.name).join(", ") || "-"}</p>
         </div>
         <div className="metric-card">
-          <p className="metric-label">Published tasks</p>
+          <p className="metric-label">Published writing</p>
           <p className="metric-value">{publishedTasks}</p>
           <p className="metric-hint">{examTasks} Exam Mode tasks</p>
         </div>
         <div className="metric-card">
           <p className="metric-label">Rubrics</p>
           <p className="metric-value">{state.rubrics.length}</p>
-          <p className="metric-hint">School-based marking criteria</p>
+          <p className="metric-hint">Scoring criteria</p>
         </div>
         <div className="metric-card">
-          <p className="metric-label">Marking queue</p>
+          <p className="metric-label">To mark</p>
           <p className="metric-value">{state.markingItems.length}</p>
-          <p className="metric-hint">{pendingMarking} waiting or failed</p>
+          <p className="metric-hint">{pendingMarking} need attention</p>
         </div>
       </section>
 
-      <section className="grid gap-5 lg:grid-cols-3">
-        <form id="rubrics" onSubmit={onCreateRubric} className="section-anchor section-card">
+      <section className="section-card">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">What do you want to do now?</h2>
+            <p className="panel-subtitle">Choose one job. Setup, marking and reports stay separate.</p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          {([
+            ["overview", "Today", "Next steps"],
+            ["tasks", "Set writing task", "Create and publish"],
+            ["marking", "Mark writing", "Review and release"],
+            ["reports", "Class progress", "Report and export"],
+            ["rubrics", "Rubrics", "Scoring criteria"],
+          ] as const).map(([workbench, label, description]) => (
+            <button
+              key={workbench}
+              type="button"
+              onClick={() => setActiveWorkbench(workbench)}
+              className={`rounded-md border px-4 py-3 text-left transition ${
+                activeWorkbench === workbench
+                  ? "border-ink bg-ink text-paper"
+                  : "border-ink/10 bg-paper text-ink hover:border-moss/50"
+              }`}
+              data-testid={`teacher-workbench-${workbench}`}
+            >
+              <span className="block text-sm font-semibold">{label}</span>
+              <span className={`mt-1 block text-xs ${activeWorkbench === workbench ? "text-paper/65" : "text-ink/55"}`}>
+                {description}
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {activeWorkbench === "overview" ? (
+        <section className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="section-card">
+            <div className="panel-header">
+              <div>
+                <h2 className="panel-title">Things to do</h2>
+                <p className="panel-subtitle">Start here instead of scanning every tool on the page.</p>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3">
+              <button type="button" onClick={() => setActiveWorkbench("marking")} className="muted-panel text-left">
+                <p className="font-semibold text-ink">{pendingMarking} writings need marking</p>
+                <p className="mt-1 text-sm text-ink/60">Check AI feedback, adjust scores, then release to students.</p>
+              </button>
+              <button type="button" onClick={() => setActiveWorkbench("reports")} className="muted-panel text-left">
+                <p className="font-semibold text-ink">View class progress</p>
+                <p className="mt-1 text-sm text-ink/60">See who finished and what the class should practise next.</p>
+              </button>
+              <button type="button" onClick={() => setActiveWorkbench("tasks")} className="muted-panel text-left">
+                <p className="font-semibold text-ink">Set a writing task</p>
+                <p className="mt-1 text-sm text-ink/60">Choose a class, choose the writing, then publish.</p>
+              </button>
+            </div>
+          </div>
+          <div className="section-card">
+            <div className="panel-header">
+              <div>
+                <h2 className="panel-title">Current writing tasks</h2>
+                <p className="panel-subtitle">A short operational list. Full management is in Tasks.</p>
+              </div>
+              <span className="status-pill-muted">{state.tasks.length} total</span>
+            </div>
+            <div className="mt-4 grid gap-3">
+              {currentTasks.map((task) => (
+                <div key={task.id} className="muted-panel">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-semibold text-ink">{task.title}</p>
+                    <span className={task.mode === "EXAM" ? "status-pill-warning" : "status-pill"}>{task.mode}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-ink/65">
+                    {task.level} · {task.status} · Assigned: {task.assigned_classes.join(", ") || "-"}
+                  </p>
+                </div>
+              ))}
+              {currentTasks.length === 0 ? <p className="empty-state">No active tasks.</p> : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <section className={`grid gap-5 lg:grid-cols-3 ${activeWorkbench === "tasks" || activeWorkbench === "rubrics" ? "" : "hidden"}`}>
+        <form id="rubrics" onSubmit={onCreateRubric} className={`section-anchor section-card ${activeWorkbench === "rubrics" ? "" : "hidden"}`}>
           <div className="panel-header">
             <div>
               <h2 className="panel-title">Rubric builder</h2>
@@ -508,7 +597,7 @@ export function TeacherDashboard() {
           </div>
         </form>
 
-        <form id="tasks" onSubmit={onCreateTask} className="section-anchor section-card lg:col-span-2">
+        <form id="tasks" onSubmit={onCreateTask} className={`section-anchor section-card lg:col-span-2 ${activeWorkbench === "tasks" ? "" : "hidden"}`}>
           <div className="panel-header">
             <div>
               <h2 className="panel-title">Task builder</h2>
@@ -604,7 +693,7 @@ export function TeacherDashboard() {
         </form>
       </section>
 
-      <section className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
+      <section className={`grid gap-5 lg:grid-cols-[0.85fr_1.15fr] ${activeWorkbench === "tasks" ? "" : "hidden"}`}>
         <form onSubmit={onAssignTask} className="section-card">
           <div className="panel-header">
             <div>
@@ -688,8 +777,8 @@ export function TeacherDashboard() {
         </div>
       </section>
 
-      <section id="reports" className="section-anchor">
-        <div className="mb-5 section-card">
+      <section id="reports" className={`section-anchor ${activeWorkbench === "reports" || activeWorkbench === "marking" ? "" : "hidden"}`}>
+        <div className={`mb-5 section-card ${activeWorkbench === "reports" ? "" : "hidden"}`}>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-xl font-semibold text-ink">Data / report page</h2>
@@ -883,7 +972,7 @@ export function TeacherDashboard() {
           )}
         </div>
 
-        <div id="marking" className="section-anchor section-card">
+        <div id="marking" className={`section-anchor section-card ${activeWorkbench === "marking" ? "" : "hidden"}`}>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-xl font-semibold text-ink">AI marking queue</h2>
             <button

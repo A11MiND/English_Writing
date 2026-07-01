@@ -19,8 +19,12 @@ type StudentState =
   | { status: "denied"; message: string }
   | { status: "ready"; user: AppShellUser; profile: StudentProfile; tasks: WritingTask[] };
 
+type StudentTaskView = "next" | "feedback" | "history";
+
 export function StudentHome() {
   const [state, setState] = useState<StudentState>({ status: "loading" });
+  const [taskView, setTaskView] = useState<StudentTaskView>("next");
+  const [showAllTasks, setShowAllTasks] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -72,6 +76,28 @@ export function StudentHome() {
   const toWriteCount = state.tasks.filter((task) => !task.locked && !task.submission_id).length;
   const submittedCount = state.tasks.filter((task) => task.locked || task.submission_id).length;
   const feedbackReadyCount = state.tasks.filter((task) => task.feedback_released).length;
+  const toWriteTasks = state.tasks.filter((task) => !task.locked && !task.submission_id);
+  const feedbackTasks = state.tasks.filter((task) => task.feedback_released);
+  const submittedTasks = state.tasks.filter((task) => task.locked || task.submission_id);
+  const currentTasks = taskView === "next"
+    ? toWriteTasks
+    : taskView === "feedback"
+      ? feedbackTasks
+      : submittedTasks.slice(0, 12);
+  const displayLimit = taskView === "history" ? 6 : 3;
+  const visibleTasks = showAllTasks ? currentTasks : currentTasks.slice(0, displayLimit);
+  const hiddenTaskCount = Math.max(0, currentTasks.length - visibleTasks.length);
+  const selectedEmptyMessage = taskView === "next"
+    ? "You have no writing to do right now."
+    : taskView === "feedback"
+      ? "No teacher feedback is ready yet."
+      : "No finished writing yet.";
+
+  function taskActionLabel(task: WritingTask) {
+    if (task.feedback_released) return "View feedback";
+    if (task.submission_id || task.locked) return "Open my writing";
+    return task.mode === "EXAM" ? "Start exam" : "Start writing";
+  }
 
   return (
     <AppShell title="Student home" user={state.user} onLogout={() => void onLogout()} maxWidth="standard">
@@ -82,34 +108,53 @@ export function StudentHome() {
           <p className="metric-hint">{state.profile.class_name ?? "No class assigned"}</p>
         </div>
         <div className="metric-card">
-          <p className="metric-label">To write</p>
+          <p className="metric-label">To do</p>
           <p className="metric-value">{toWriteCount}</p>
-          <p className="metric-hint">Practice or Exam tasks open</p>
+          <p className="metric-hint">Writing not finished</p>
         </div>
         <div className="metric-card">
-          <p className="metric-label">Submitted</p>
+          <p className="metric-label">Done</p>
           <p className="metric-value">{submittedCount}</p>
-          <p className="metric-hint">Locked final writing</p>
+          <p className="metric-hint">Sent to teacher</p>
         </div>
         <div className="metric-card">
-          <p className="metric-label">Feedback ready</p>
+          <p className="metric-label">Teacher feedback</p>
           <p className="metric-value">{feedbackReadyCount}</p>
-          <p className="metric-hint">Released by teacher</p>
+          <p className="metric-hint">Ready to read</p>
         </div>
       </section>
 
       <section id="tasks" className="section-anchor section-card">
         <div className="panel-header">
           <div>
-            <h2 className="panel-title">Assigned writing tasks</h2>
+            <h2 className="panel-title">What should I do?</h2>
             <p className="panel-subtitle">
-              Open Practice Mode for suggestions, or Exam Mode for timed writing without real-time help.
+              Start with one task. Finished writing is kept in Done work.
             </p>
           </div>
           <span className="status-pill-muted">{state.profile.level}</span>
         </div>
+        <div className="mt-4 flex flex-wrap gap-2" aria-label="Task views">
+          {([
+            ["next", `To do (${toWriteCount})`],
+            ["feedback", `Teacher feedback (${feedbackReadyCount})`],
+            ["history", `Done work (${submittedCount})`],
+          ] as const).map(([view, label]) => (
+            <button
+              key={view}
+              type="button"
+              onClick={() => {
+                setTaskView(view);
+                setShowAllTasks(false);
+              }}
+              className={`btn ${taskView === view ? "btn-primary" : "btn-secondary"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <div className="mt-4 grid gap-4">
-          {state.tasks.map((task) => (
+          {visibleTasks.map((task) => (
             <div
               key={task.id}
               className="muted-panel"
@@ -139,7 +184,7 @@ export function StudentHome() {
                   className="btn btn-secondary"
                   data-testid={`open-${task.mode.toLowerCase()}-task`}
                 >
-                  Open writing editor
+                  {taskActionLabel(task)}
                 </Link>
                 {task.submitted_at ? (
                   <span className="text-sm text-ink/55">
@@ -149,8 +194,26 @@ export function StudentHome() {
               </div>
             </div>
           ))}
-          {state.tasks.length === 0 ? (
-            <p className="muted-panel text-sm text-ink/60">No published tasks assigned to your class yet.</p>
+          {hiddenTaskCount > 0 ? (
+            <button
+              type="button"
+              className="btn btn-secondary justify-self-start"
+              onClick={() => setShowAllTasks(true)}
+              data-testid="student-show-all-tasks"
+            >
+              Show all {currentTasks.length} tasks
+            </button>
+          ) : showAllTasks && currentTasks.length > displayLimit ? (
+            <button
+              type="button"
+              className="btn btn-secondary justify-self-start"
+              onClick={() => setShowAllTasks(false)}
+            >
+              Show fewer tasks
+            </button>
+          ) : null}
+          {currentTasks.length === 0 ? (
+            <p className="muted-panel text-sm text-ink/60">{selectedEmptyMessage}</p>
           ) : null}
         </div>
       </section>

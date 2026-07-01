@@ -45,6 +45,14 @@ async function expectNoBrowserStoredToken(page: Page) {
   expect(storageSnapshot.sessionStorage).toEqual([]);
 }
 
+async function showAllStudentTasksIfAvailable(page: Page) {
+  await expect(page.getByRole("heading", { name: "Student home" })).toBeVisible();
+  const showAll = page.getByTestId("student-show-all-tasks");
+  if ((await showAll.count()) > 0) {
+    await showAll.first().click();
+  }
+}
+
 async function parseApi<T>(response: APIResponse): Promise<T> {
   const body = (await response.json()) as ApiEnvelope<T>;
   expect(response.ok(), body.success ? undefined : body.message).toBeTruthy();
@@ -125,6 +133,7 @@ test("teacher creates unique Practice and Exam tasks and assigns them to P5A", a
   await createTask(examTitle, "EXAM");
 
   await page.reload();
+  await page.getByTestId("teacher-workbench-tasks").click();
   await expect(page.getByTestId("teacher-active-task").filter({ hasText: practiceTitle }).first()).toBeVisible();
   await expect(page.getByTestId("teacher-active-task").filter({ hasText: examTitle }).first()).toBeVisible();
   await logout(page);
@@ -136,6 +145,7 @@ test("student completes Practice Mode with grammar suggestion and locked submiss
   await login(page, studentEmail);
   await expect(page).toHaveURL(/\/student$/);
   await expect(page.getByRole("heading", { name: "Student home" })).toBeVisible();
+  await showAllStudentTasksIfAvailable(page);
 
   const taskCard = page.getByTestId("student-task-practice").filter({ hasText: practiceTitle }).first();
   await expect(taskCard).toBeVisible();
@@ -162,6 +172,8 @@ test("student completes Exam Mode, paste is blocked and timer auto-submits", asy
 
   await login(page, studentEmail);
   await expect(page).toHaveURL(/\/student$/);
+  await expect(page.getByRole("heading", { name: "Student home" })).toBeVisible();
+  await showAllStudentTasksIfAvailable(page);
 
   const taskCard = page.getByTestId("student-task-exam").filter({ hasText: examTitle }).first();
   await expect(taskCard).toBeVisible();
@@ -190,6 +202,7 @@ test("teacher runs real AI marking, reviews and releases feedback", async ({ pag
 
   await login(page, teacherEmail);
   await expect(page).toHaveURL(/\/teacher$/);
+  await page.getByTestId("teacher-workbench-marking").click();
 
   const markingItem = page.getByTestId("marking-item").filter({ hasText: practiceTitle }).first();
   await expect(markingItem).toBeVisible({ timeout: 20_000 });
@@ -230,6 +243,7 @@ test("teacher previews class report and exports CSV and PDF evidence", async ({ 
 
   await login(page, teacherEmail);
   await expect(page).toHaveURL(/\/teacher$/);
+  await page.getByTestId("teacher-workbench-reports").click();
 
   await page.getByTestId("report-generate").click();
   const reportResult = page.getByTestId("report-result");
