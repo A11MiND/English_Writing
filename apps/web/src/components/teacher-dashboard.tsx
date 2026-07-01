@@ -83,6 +83,11 @@ const defaultDimensions = [
   },
 ];
 
+function scorePercent(value: number | null | undefined, maxScore: number) {
+  if (!Number.isFinite(value ?? Number.NaN) || maxScore <= 0) return "0%";
+  return `${Math.max(0, Math.min(100, Math.round(((value ?? 0) / maxScore) * 100)))}%`;
+}
+
 export function TeacherDashboard() {
   const [state, setState] = useState<TeacherState>({ status: "loading" });
   const [notice, setNotice] = useState("");
@@ -395,6 +400,9 @@ export function TeacherDashboard() {
   const publishedTasks = state.tasks.filter((task) => task.status === "PUBLISHED").length;
   const examTasks = state.tasks.filter((task) => task.mode === "EXAM").length;
   const pendingMarking = state.markingItems.filter((item) => item.marking_result?.status !== "AI_MARKED").length;
+  const reportDistributionMax = classReport
+    ? Math.max(1, ...Object.values(classReport.score_distribution))
+    : 1;
 
   return (
     <AppShell title="Teacher dashboard" user={state.user} onLogout={() => void onLogout()}>
@@ -777,10 +785,22 @@ export function TeacherDashboard() {
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="muted-panel">
                   <p className="text-sm font-semibold text-ink">Rubric breakdown</p>
-                  <div className="mt-3 grid gap-2 text-sm text-ink/70">
-                    <p>Content: {classReport.rubric_breakdown.content_average ?? "-"}</p>
-                    <p>Language: {classReport.rubric_breakdown.language_average ?? "-"}</p>
-                    <p>Organisation: {classReport.rubric_breakdown.organisation_average ?? "-"}</p>
+                  <div className="mt-4 grid gap-3 text-sm text-ink/70">
+                    {[
+                      ["Content", classReport.rubric_breakdown.content_average],
+                      ["Language", classReport.rubric_breakdown.language_average],
+                      ["Organisation", classReport.rubric_breakdown.organisation_average],
+                    ].map(([label, value]) => (
+                      <div key={label}>
+                        <div className="mb-1 flex items-center justify-between gap-3">
+                          <span>{label}</span>
+                          <span className="font-semibold text-ink">{value ?? "-"}/5</span>
+                        </div>
+                        <div className="bar-track" aria-hidden="true">
+                          <div className="bar-fill" style={{ width: scorePercent(value as number | null, 5) }} />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
                 <div className="muted-panel">
@@ -788,9 +808,30 @@ export function TeacherDashboard() {
                   <div className="mt-3 grid gap-2 text-sm text-ink/70">
                     {classReport.common_weaknesses.length === 0 ? <p>No weakness data yet.</p> : null}
                     {classReport.common_weaknesses.slice(0, 5).map((item) => (
-                      <p key={item.weakness}>{item.weakness}: {item.count}</p>
+                      <div key={item.weakness} className="flex items-center justify-between gap-3 rounded-md bg-paper px-3 py-2">
+                        <span>{item.weakness}</span>
+                        <span className="text-sm font-semibold text-coral">{item.count}</span>
+                      </div>
                     ))}
                   </div>
+                </div>
+              </div>
+              <div className="muted-panel">
+                <p className="text-sm font-semibold text-ink">Score distribution</p>
+                <div className="mt-4 grid gap-3 text-sm text-ink/70">
+                  {Object.entries(classReport.score_distribution).length === 0 ? <p>No score data yet.</p> : null}
+                  {Object.entries(classReport.score_distribution).map(([bucket, count]) => (
+                    <div key={bucket} className="grid gap-2 sm:grid-cols-[110px_1fr_48px] sm:items-center">
+                      <span className="font-semibold text-ink">{bucket}</span>
+                      <div className="bar-track" aria-hidden="true">
+                        <div
+                          className="bar-fill"
+                          style={{ width: `${Math.round((count / reportDistributionMax) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-right font-semibold text-ink">{count}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
               <div className="muted-panel">
@@ -878,9 +919,64 @@ export function TeacherDashboard() {
                         <p className="font-semibold text-ink">
                           AI score: {result.total_score ?? "-"} · confidence {result.confidence_level ?? "-"}
                         </p>
-                        <p className="mt-2">{result.content_feedback ?? result.last_error ?? "Queued for marking."}</p>
+                        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                          {[
+                            ["Content", result.content_score],
+                            ["Language", result.language_score],
+                            ["Organisation", result.organisation_score],
+                          ].map(([label, value]) => (
+                            <div key={label} className="rounded-md bg-chalk px-3 py-2">
+                              <p className="text-xs font-semibold uppercase text-ink/45">{label}</p>
+                              <p className="mt-1 text-lg font-semibold text-ink">{value ?? "-"}/5</p>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 grid gap-2 leading-6">
+                          <p>{result.content_feedback ?? result.last_error ?? "Queued for marking."}</p>
+                          {result.language_feedback ? <p>{result.language_feedback}</p> : null}
+                          {result.organisation_feedback ? <p>{result.organisation_feedback}</p> : null}
+                        </div>
                         {result.strengths.length > 0 ? (
-                          <p className="mt-2">Strengths: {result.strengths.join(", ")}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {result.strengths.slice(0, 4).map((strength) => (
+                              <span key={strength} className="insight-chip">{strength}</span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {result.weaknesses.length > 0 ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {result.weaknesses.slice(0, 4).map((weakness) => (
+                              <span key={weakness} className="insight-chip-warning">{weakness}</span>
+                            ))}
+                          </div>
+                        ) : null}
+                        {result.warning_flags.length > 0 ? (
+                          <div className="mt-3 rounded-md border border-coral/20 bg-coral/5 p-3 text-coral">
+                            Warning flags: {result.warning_flags.join(", ")}
+                          </div>
+                        ) : null}
+                        {result.sentence_level_comments.length > 0 ? (
+                          <div className="mt-3 rounded-md bg-chalk p-3">
+                            <p className="font-semibold text-ink">Sentence comments</p>
+                            <div className="mt-2 grid gap-2">
+                              {result.sentence_level_comments.slice(0, 3).map((comment, index) => (
+                                <p key={`${comment.sentence}-${index}`}>
+                                  <span className="font-semibold text-ink">{comment.category}: </span>
+                                  {comment.comment}
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
+                        {result.recommended_exercises.length > 0 ? (
+                          <div className="mt-3 rounded-md bg-chalk p-3">
+                            <p className="font-semibold text-ink">Recommended exercises</p>
+                            <div className="mt-2 grid gap-1">
+                              {result.recommended_exercises.slice(0, 3).map((exercise) => (
+                                <p key={exercise.title}>{exercise.title} · {exercise.focus_area}</p>
+                              ))}
+                            </div>
+                          </div>
                         ) : null}
                         <button
                           type="button"

@@ -11,7 +11,7 @@ This file is the visible checkpoint for what is done, what is next, and what evi
 | Phase 0-8 Core Workflow | Done | API, web and E2E passing evidence in `docs/uat-readiness.md`. | Keep regression green while productizing UI. |
 | Spec / PRD Traceability | Done | `docs/specs/14-requirements-traceability.md` maps PRD, Technical Proposal, spec-driven and UI requirements to current status. | Keep this updated after each implementation batch. |
 | UI API Support | Done | Student task state, dashboard summary, marking filters, rubric count, task detail and exam events are implemented. | Wire these contracts into productized pages. |
-| UI Productization | Doing | Matrix in `docs/design/ui-productization-matrix.md`; shared shell, page sections, writing editor and feedback first pass implemented. Catalyst is the reference style, not copied source. | Productize report visualizations, marking review details and mobile QA. |
+| UI Productization | Doing | Matrix in `docs/design/ui-productization-matrix.md`; shared shell, writing editor, feedback, report visuals and marking details first pass implemented. Catalyst is the reference style, not copied source. | Continue Admin/Teacher table polish and mobile QA. |
 | Security Gate | Doing | School, student and teacher scoping tests exist. | Add more route-level DB tests during UI integration. |
 | Stress / UAT Evidence | Done for queue/load, partial for worker drain | Evidence under `docs/uat-evidence/`; full 470-essay LLM drain has not been run. | Run full provider-costed worker drain only with approval. |
 | Deployment | Later | Docker Compose local environment is working. | Decide Render, Vercel or other cloud target later. |
@@ -28,9 +28,9 @@ This file is the visible checkpoint for what is done, what is next, and what evi
 
 | Priority | Work | Success Criteria |
 | --- | --- | --- |
-| 1 | Productize report visualizations. | Report preview uses clear score distribution, rubric breakdown and weakness presentation. |
-| 2 | Continue Teacher/Admin detail polish. | Forms, tables and review states are easier to scan without changing APIs. |
-| 3 | Add UI-focused regression coverage. | Playwright covers productized navigation and core UAT flows. |
+| 1 | Continue Teacher/Admin detail polish. | Forms, tables and review states are easier to scan without changing APIs. |
+| 2 | Add UI-focused regression coverage. | Playwright covers productized navigation and core UAT flows. |
+| 3 | Mobile QA pass. | Student, Teacher and Admin pages have no obvious overflow or broken layout on phone width. |
 | 4 | Add fuller NLP metrics layer. | Marking pipeline includes readability, lexical and sentence metrics as structured evidence. |
 | 5 | Harden marking worker operations. | Worker has DLQ/backoff/metrics and a clear provider-costed 470-job drain plan. |
 
@@ -69,4 +69,6 @@ This file is the visible checkpoint for what is done, what is next, and what evi
 - Productized Practice and Exam writing workspaces into a stable editor canvas with sticky instruction/suggestion side panel.
 - Preserved TipTap editing, autosave, Practice Mode suggestions, Exam Mode timer, paste blocking and all existing E2E selectors.
 - Productized released feedback with metric score cards, teacher-feedback panel and post-writing exercise panel.
-- Remaining UI work: report visualizations, marking review detail layout, Admin/Teacher table polish and mobile QA screenshots.
+- Productized teacher report preview with rubric bars, score distribution bars and weakness rows.
+- Productized marking review cards with dimension scores, feedback sections, strengths, weaknesses, warning flags, sentence comments and recommended exercises.
+- Remaining UI work: Admin/Teacher table polish, focused UI regression coverage and mobile QA screenshots.

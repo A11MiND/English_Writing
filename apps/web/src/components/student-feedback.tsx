@@ -43,10 +43,10 @@ export function StudentFeedback({ submissionId }: { submissionId: string }) {
   }, [submissionId]);
 
   async function onCompleteExercise(exerciseId: string) {
-    setNotice("");
+    setNotice("Saving exercise...");
     await completeExercise(exerciseId, responses[exerciseId] ?? "");
     setNotice("Exercise saved.");
-    await load();
+    void load().catch(() => undefined);
   }
 
   async function onLogout() {
