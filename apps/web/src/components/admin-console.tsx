@@ -167,7 +167,7 @@ export function AdminConsole() {
         </div>
       ) : null}
 
-      <section className="mt-6 grid gap-4 md:grid-cols-4">
+      <section id="ai-status" className="section-anchor grid gap-4 md:grid-cols-4">
         <div className="metric-card">
           <p className="metric-label">AI provider</p>
           <p className="metric-value">{state.aiStatus.provider_display_name}</p>
@@ -188,9 +188,17 @@ export function AdminConsole() {
         </div>
       </section>
 
-      <section className="grid gap-5 py-6 lg:grid-cols-[0.95fr_1.05fr]">
-        <form onSubmit={onImport} className="section-card">
-          <h2 className="text-xl font-semibold text-ink">CSV import</h2>
+      <section className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+        <form id="import" onSubmit={onImport} className="section-anchor section-card">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">CSV import</h2>
+              <p className="panel-subtitle">
+                Import students and teachers with row-level validation before school pilot testing.
+              </p>
+            </div>
+            <span className="status-pill-muted">{importRole}</span>
+          </div>
           <div className="mt-4 flex gap-2">
             {(["STUDENT", "TEACHER"] as const).map((role) => (
               <button
@@ -276,8 +284,13 @@ export function AdminConsole() {
           ) : null}
         </form>
 
-        <form onSubmit={onCreateClass} className="section-card">
-          <h2 className="text-xl font-semibold text-ink">Class management</h2>
+        <form id="classes" onSubmit={onCreateClass} className="section-anchor section-card">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Class management</h2>
+              <p className="panel-subtitle">Maintain P4 to P6 classes and membership counts.</p>
+            </div>
+          </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
             <input
               value={classForm.name}
@@ -329,8 +342,14 @@ export function AdminConsole() {
         </form>
       </section>
 
-      <section className="section-card">
-        <h2 className="text-xl font-semibold text-ink">Account management</h2>
+      <section id="accounts" className="section-anchor section-card">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Account management</h2>
+            <p className="panel-subtitle">Suspend, archive or restore users without removing audit history.</p>
+          </div>
+          <span className="status-pill-muted">{state.users.length} accounts</span>
+        </div>
         <div className="mt-4 table-shell">
           <table className="w-full text-left text-sm">
             <thead className="table-head">

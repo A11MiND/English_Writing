@@ -19,61 +19,97 @@ type AppShellProps = {
   maxWidth?: "standard" | "wide";
 };
 
-const navByRole: Record<Role, { href: string; label: string }[]> = {
-  SYSTEM_ADMIN: [{ href: "/admin", label: "Admin" }],
-  SCHOOL_ADMIN: [{ href: "/admin", label: "Admin" }],
-  TEACHER: [{ href: "/teacher", label: "Teacher" }],
-  STUDENT: [{ href: "/student", label: "Student" }],
+const navByRole: Record<Role, { href: string; label: string; description: string }[]> = {
+  SYSTEM_ADMIN: [
+    { href: "/admin", label: "Overview", description: "AI status and school controls" },
+    { href: "/admin#import", label: "CSV import", description: "Students and teachers" },
+    { href: "/admin#classes", label: "Classes", description: "P4 to P6 setup" },
+    { href: "/admin#accounts", label: "Accounts", description: "Status and roles" },
+  ],
+  SCHOOL_ADMIN: [
+    { href: "/admin", label: "Overview", description: "AI status and school controls" },
+    { href: "/admin#import", label: "CSV import", description: "Students and teachers" },
+    { href: "/admin#classes", label: "Classes", description: "P4 to P6 setup" },
+    { href: "/admin#accounts", label: "Accounts", description: "Status and roles" },
+  ],
+  TEACHER: [
+    { href: "/teacher", label: "Overview", description: "Class workload" },
+    { href: "/teacher#rubrics", label: "Rubrics", description: "School marking criteria" },
+    { href: "/teacher#tasks", label: "Tasks", description: "Create and assign writing" },
+    { href: "/teacher#reports", label: "Reports", description: "Class analytics and exports" },
+    { href: "/teacher#marking", label: "Marking", description: "AI results and review" },
+  ],
+  STUDENT: [
+    { href: "/student", label: "Home", description: "Assigned writing tasks" },
+    { href: "/student#tasks", label: "Tasks", description: "Practice and Exam Mode" },
+    { href: "/student#profile", label: "Profile", description: "Class and level" },
+  ],
 };
 
 export function AppShell({ title, user, children, onLogout, maxWidth = "wide" }: AppShellProps) {
   const pathname = usePathname();
   const navItems = navByRole[user.role] ?? [];
-  const contentWidth = maxWidth === "standard" ? "max-w-6xl" : "max-w-7xl";
+  const contentWidth = maxWidth === "standard" ? "max-w-6xl" : "max-w-[1500px]";
 
   return (
-    <main className="min-h-screen px-4 py-4 text-ink md:px-6">
-      <div className={`mx-auto grid w-full ${contentWidth} gap-5 lg:grid-cols-[232px_1fr]`}>
-        <aside className="surface-card h-fit p-4 lg:sticky lg:top-4">
-          <div className="border-b border-ink/10 pb-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-moss">W F Joseph Lee</p>
-            <p className="mt-2 text-lg font-semibold leading-tight">English AI Writing</p>
+    <main className="portal-shell text-ink">
+      <div className={`portal-frame ${contentWidth}`}>
+        <aside className="portal-sidebar">
+          <div className="sidebar-brand">
+            <div className="brand-mark">WFJ</div>
+            <div>
+              <p className="sidebar-school">W F Joseph Lee</p>
+              <p className="sidebar-product">English AI Writing</p>
+            </div>
           </div>
-          <nav className="mt-4 grid gap-2">
+          <nav className="sidebar-nav" aria-label="Primary navigation">
             {navItems.map((item) => {
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const active = pathname === item.href;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
-                    active ? "bg-moss text-white" : "text-ink/70 hover:bg-chalk hover:text-ink"
-                  }`}
+                  className={`sidebar-nav-link ${active ? "sidebar-nav-link-active" : ""}`}
                 >
-                  {item.label}
+                  <span className="sidebar-nav-label">{item.label}</span>
+                  <span className="sidebar-nav-description">{item.description}</span>
                 </Link>
               );
             })}
           </nav>
+          <div className="sidebar-footer">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink/45">Controlled pilot</p>
+            <p className="mt-1 text-sm text-ink/65">One-school UAT workspace</p>
+          </div>
         </aside>
 
-        <section className="min-w-0">
-          <header className="surface-card flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
+        <section className="portal-content">
+          <header className="portal-topbar">
             <div>
-              <p className="eyebrow">W F Joseph Lee Primary School</p>
+              <p className="page-kicker">W F Joseph Lee Primary School</p>
               <h1 className="page-title">{title}</h1>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="rounded-md bg-chalk px-3 py-2 text-right">
-                <p className="text-sm font-semibold text-ink">{user.display_name}</p>
-                <p className="text-xs font-semibold text-moss">{user.role}</p>
+            <div className="topbar-actions">
+              <div className="user-chip">
+                <div className="user-avatar">{user.display_name.slice(0, 1).toUpperCase()}</div>
+                <div className="min-w-0 text-right">
+                  <p className="truncate text-sm font-semibold text-ink">{user.display_name}</p>
+                  <p className="role-badge">{user.role.replace("_", " ")}</p>
+                </div>
               </div>
               <button type="button" onClick={onLogout} className="btn btn-secondary">
                 Logout
               </button>
             </div>
           </header>
-          <div className="py-5">{children}</div>
+          <div className="mobile-section-nav" aria-label="Section shortcuts">
+            {navItems.slice(0, 5).map((item) => (
+              <Link key={item.href} href={item.href} className="mobile-nav-pill">
+                {item.label}
+              </Link>
+            ))}
+          </div>
+          <div className="content-stack">{children}</div>
         </section>
       </div>
     </main>

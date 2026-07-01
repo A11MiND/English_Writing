@@ -392,6 +392,10 @@ export function TeacherDashboard() {
     );
   }
 
+  const publishedTasks = state.tasks.filter((task) => task.status === "PUBLISHED").length;
+  const examTasks = state.tasks.filter((task) => task.mode === "EXAM").length;
+  const pendingMarking = state.markingItems.filter((item) => item.marking_result?.status !== "AI_MARKED").length;
+
   return (
     <AppShell title="Teacher dashboard" user={state.user} onLogout={() => void onLogout()}>
       {notice ? (
@@ -405,9 +409,37 @@ export function TeacherDashboard() {
         </div>
       ) : null}
 
-      <section className="grid gap-5 py-6 lg:grid-cols-3">
-        <form onSubmit={onCreateRubric} className="section-card">
-          <h2 className="text-xl font-semibold text-ink">Rubric builder</h2>
+      <section id="overview" className="section-anchor grid gap-4 md:grid-cols-4">
+        <div className="metric-card">
+          <p className="metric-label">Assigned classes</p>
+          <p className="metric-value">{state.classes.length}</p>
+          <p className="metric-hint">{state.classes.map((schoolClass) => schoolClass.name).join(", ") || "-"}</p>
+        </div>
+        <div className="metric-card">
+          <p className="metric-label">Published tasks</p>
+          <p className="metric-value">{publishedTasks}</p>
+          <p className="metric-hint">{examTasks} Exam Mode tasks</p>
+        </div>
+        <div className="metric-card">
+          <p className="metric-label">Rubrics</p>
+          <p className="metric-value">{state.rubrics.length}</p>
+          <p className="metric-hint">School-based marking criteria</p>
+        </div>
+        <div className="metric-card">
+          <p className="metric-label">Marking queue</p>
+          <p className="metric-value">{state.markingItems.length}</p>
+          <p className="metric-hint">{pendingMarking} waiting or failed</p>
+        </div>
+      </section>
+
+      <section className="grid gap-5 lg:grid-cols-3">
+        <form id="rubrics" onSubmit={onCreateRubric} className="section-anchor section-card">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Rubric builder</h2>
+              <p className="panel-subtitle">Create reusable P4 to P6 rubric dimensions for teacher review.</p>
+            </div>
+          </div>
           <input
             value={rubricForm.title}
             onChange={(event) => setRubricForm({ ...rubricForm, title: event.target.value })}
@@ -468,8 +500,16 @@ export function TeacherDashboard() {
           </div>
         </form>
 
-        <form onSubmit={onCreateTask} className="section-card lg:col-span-2">
-          <h2 className="text-xl font-semibold text-ink">Task builder</h2>
+        <form id="tasks" onSubmit={onCreateTask} className="section-anchor section-card lg:col-span-2">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Task builder</h2>
+              <p className="panel-subtitle">Create draft or published Practice and Exam Mode writing tasks.</p>
+            </div>
+            <span className={taskForm.mode === "EXAM" ? "status-pill-warning" : "status-pill"}>
+              {taskForm.mode === "EXAM" ? "Exam Mode" : "Practice Mode"}
+            </span>
+          </div>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <input
               value={taskForm.title}
@@ -556,9 +596,14 @@ export function TeacherDashboard() {
         </form>
       </section>
 
-      <section className="grid gap-5 pb-8 lg:grid-cols-[0.85fr_1.15fr]">
+      <section className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
         <form onSubmit={onAssignTask} className="section-card">
-          <h2 className="text-xl font-semibold text-ink">Assignment flow</h2>
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Assignment flow</h2>
+              <p className="panel-subtitle">Publish a task to one assigned class at a time.</p>
+            </div>
+          </div>
           <select
             value={assignmentForm.task_id}
             onChange={(event) => setAssignmentForm({ ...assignmentForm, task_id: event.target.value })}
@@ -583,10 +628,16 @@ export function TeacherDashboard() {
         </form>
 
         <div className="section-card">
-          <h2 className="text-xl font-semibold text-ink">Active tasks</h2>
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Active tasks</h2>
+              <p className="panel-subtitle">Draft, publish, close and archive teacher-owned writing tasks.</p>
+            </div>
+            <span className="status-pill-muted">{state.tasks.length} tasks</span>
+          </div>
           <div className="mt-4 grid gap-3">
             {state.tasks.map((task) => (
-              <div key={task.id} className="muted-panel border border-ink/10" data-testid="teacher-active-task">
+              <div key={task.id} className="muted-panel" data-testid="teacher-active-task">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <p className="font-semibold text-ink">{task.title}</p>
                   <p className="text-xs font-semibold text-moss">{task.status} · {task.mode}</p>
@@ -629,8 +680,8 @@ export function TeacherDashboard() {
         </div>
       </section>
 
-      <section className="pb-10">
-        <div className="mb-6 section-card">
+      <section id="reports" className="section-anchor">
+        <div className="mb-5 section-card">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-xl font-semibold text-ink">Data / report page</h2>
@@ -791,7 +842,7 @@ export function TeacherDashboard() {
           )}
         </div>
 
-        <div className="section-card">
+        <div id="marking" className="section-anchor section-card">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-xl font-semibold text-ink">AI marking queue</h2>
             <button

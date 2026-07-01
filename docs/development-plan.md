@@ -11,7 +11,7 @@ This file is the visible checkpoint for what is done, what is next, and what evi
 | Phase 0-8 Core Workflow | Done | API, web and E2E passing evidence in `docs/uat-readiness.md`. | Keep regression green while productizing UI. |
 | Spec / PRD Traceability | Done | `docs/specs/14-requirements-traceability.md` maps PRD, Technical Proposal, spec-driven and UI requirements to current status. | Keep this updated after each implementation batch. |
 | UI API Support | Done | Student task state, dashboard summary, marking filters, rubric count, task detail and exam events are implemented. | Wire these contracts into productized pages. |
-| UI Productization | Doing | Matrix in `docs/design/ui-productization-matrix.md`. Catalyst is the reference style, not copied source. | Build a Catalyst-inspired app shell and page sections. |
+| UI Productization | Doing | Matrix in `docs/design/ui-productization-matrix.md`; first shared shell/page-section batch implemented. Catalyst is the reference style, not copied source. | Productize writing editors and remaining detail states. |
 | Security Gate | Doing | School, student and teacher scoping tests exist. | Add more route-level DB tests during UI integration. |
 | Stress / UAT Evidence | Done for queue/load, partial for worker drain | Evidence under `docs/uat-evidence/`; full 470-essay LLM drain has not been run. | Run full provider-costed worker drain only with approval. |
 | Deployment | Later | Docker Compose local environment is working. | Decide Render, Vercel or other cloud target later. |
@@ -28,12 +28,11 @@ This file is the visible checkpoint for what is done, what is next, and what evi
 
 | Priority | Work | Success Criteria |
 | --- | --- | --- |
-| 1 | Productize shared app shell. | Student, Teacher and Admin pages use one consistent sidebar/topbar layout. |
-| 2 | Split Teacher dashboard into focused workspaces. | Overview, task/rubric, marking and reports are easier to scan and use. |
-| 3 | Productize Student home and writing editors. | Practice and Exam flows are visually distinct and preserve all current behavior. |
+| 1 | Productize writing editors. | Practice and Exam flows use the shared visual system and remain E2E green. |
+| 2 | Add UI-focused regression coverage. | Playwright covers productized navigation and core UAT flows. |
+| 3 | Continue Teacher/Admin detail polish. | Forms, tables and review states are easier to scan without changing APIs. |
 | 4 | Add fuller NLP metrics layer. | Marking pipeline includes readability, lexical and sentence metrics as structured evidence. |
 | 5 | Harden marking worker operations. | Worker has DLQ/backoff/metrics and a clear provider-costed 470-job drain plan. |
-| 6 | Add UI-focused regression coverage. | Playwright covers the productized navigation and core UAT flows. |
 
 ## Migration Checkpoint
 
@@ -53,3 +52,14 @@ This file is the visible checkpoint for what is done, what is next, and what evi
 - Added `docs/specs/14-requirements-traceability.md`.
 - Updated product scope, architecture and deployment specs to reflect the actual UAT-core implementation state.
 - Confirmed the largest remaining gaps are UI productization, fuller NLP metrics, worker hardening and production operations.
+
+## UI Productization Checkpoint
+
+2026-06-30:
+
+- Reworked the shared `AppShell` into a Catalyst-inspired sidebar and topbar layout using project-owned Tailwind components.
+- Added reusable page-section classes for panels, metrics, navigation, badges and tables.
+- Updated Student home with task-state metrics and clearer Practice/Exam task cards.
+- Updated Admin console with AI status, CSV import, class management and account management anchors.
+- Updated Teacher dashboard with overview metrics and focused Rubrics, Tasks, Reports and Marking anchors.
+- Remaining UI work: productize Practice/Exam editor workspace, feedback page, report visualizations and focused mobile QA.

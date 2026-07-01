@@ -69,30 +69,50 @@ export function StudentHome() {
     );
   }
 
+  const toWriteCount = state.tasks.filter((task) => !task.locked && !task.submission_id).length;
+  const submittedCount = state.tasks.filter((task) => task.locked || task.submission_id).length;
+  const feedbackReadyCount = state.tasks.filter((task) => task.feedback_released).length;
+
   return (
     <AppShell title="Student home" user={state.user} onLogout={() => void onLogout()} maxWidth="standard">
-      <section className="grid gap-5 sm:grid-cols-3">
-        <div className="section-card">
-          <p className="text-sm font-semibold text-ink/55">Student number</p>
-          <p className="mt-2 text-2xl font-semibold">{state.profile.student_number}</p>
+      <section id="profile" className="section-anchor grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="metric-card">
+          <p className="metric-label">Student number</p>
+          <p className="metric-value">{state.profile.student_number}</p>
+          <p className="metric-hint">{state.profile.class_name ?? "No class assigned"}</p>
         </div>
-        <div className="section-card">
-          <p className="text-sm font-semibold text-ink/55">Level</p>
-          <p className="mt-2 text-2xl font-semibold">{state.profile.level}</p>
+        <div className="metric-card">
+          <p className="metric-label">To write</p>
+          <p className="metric-value">{toWriteCount}</p>
+          <p className="metric-hint">Practice or Exam tasks open</p>
         </div>
-        <div className="section-card">
-          <p className="text-sm font-semibold text-ink/55">Class</p>
-          <p className="mt-2 text-2xl font-semibold">{state.profile.class_name ?? "-"}</p>
+        <div className="metric-card">
+          <p className="metric-label">Submitted</p>
+          <p className="metric-value">{submittedCount}</p>
+          <p className="metric-hint">Locked final writing</p>
+        </div>
+        <div className="metric-card">
+          <p className="metric-label">Feedback ready</p>
+          <p className="metric-value">{feedbackReadyCount}</p>
+          <p className="metric-hint">Released by teacher</p>
         </div>
       </section>
 
-      <section className="mt-5 section-card">
-        <h2 className="text-xl font-semibold text-ink">Assigned writing tasks</h2>
+      <section id="tasks" className="section-anchor section-card">
+        <div className="panel-header">
+          <div>
+            <h2 className="panel-title">Assigned writing tasks</h2>
+            <p className="panel-subtitle">
+              Open Practice Mode for suggestions, or Exam Mode for timed writing without real-time help.
+            </p>
+          </div>
+          <span className="status-pill-muted">{state.profile.level}</span>
+        </div>
         <div className="mt-4 grid gap-4">
           {state.tasks.map((task) => (
             <div
               key={task.id}
-              className="muted-panel border border-ink/10"
+              className="muted-panel"
               data-testid={`student-task-${task.mode.toLowerCase()}`}
             >
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -102,18 +122,31 @@ export function StudentHome() {
                     {task.level} · {task.rubric_title ?? "School rubric"} · {task.word_minimum ?? "-"}-{task.word_maximum ?? "-"} words
                   </p>
                 </div>
-                <span className="status-pill">
-                  {task.mode === "PRACTICE" ? "Practice Mode" : "Exam Mode"}
-                </span>
+                <div className="flex flex-wrap gap-2">
+                  <span className={task.mode === "EXAM" ? "status-pill-warning" : "status-pill"}>
+                    {task.mode === "PRACTICE" ? "Practice Mode" : "Exam Mode"}
+                  </span>
+                  {task.locked || task.submission_id ? (
+                    <span className="status-pill-muted">Submitted</span>
+                  ) : null}
+                  {task.feedback_released ? <span className="status-pill">Feedback ready</span> : null}
+                </div>
               </div>
               <p className="mt-3 text-sm leading-6 text-ink/70">{task.instruction}</p>
-              <Link
-                href={`/student/tasks/${task.id}/${task.mode === "PRACTICE" ? "practice" : "exam"}`}
-                className="btn btn-secondary mt-4"
-                data-testid={`open-${task.mode.toLowerCase()}-task`}
-              >
-                Open writing editor
-              </Link>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Link
+                  href={`/student/tasks/${task.id}/${task.mode === "PRACTICE" ? "practice" : "exam"}`}
+                  className="btn btn-secondary"
+                  data-testid={`open-${task.mode.toLowerCase()}-task`}
+                >
+                  Open writing editor
+                </Link>
+                {task.submitted_at ? (
+                  <span className="text-sm text-ink/55">
+                    Submitted {new Date(task.submitted_at).toLocaleDateString()}
+                  </span>
+                ) : null}
+              </div>
             </div>
           ))}
           {state.tasks.length === 0 ? (
