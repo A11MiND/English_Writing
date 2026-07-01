@@ -83,3 +83,13 @@ This file is the visible checkpoint for what is done, what is next, and what evi
 - Refactored Student Home from a historical task feed into To do / Teacher feedback / Done work views; the default To do view shows a short list first with `Show all` for the full task list.
 - Refactored Teacher Dashboard from a single long page into task-specific sections: Today, Set writing task, Mark writing, Class progress and Rubrics.
 - Updated visual evidence screenshots: `docs/uat-evidence/screenshots/11-student-home-ia-refactor.png` and `docs/uat-evidence/screenshots/12-teacher-dashboard-ia-refactor.png`.
+
+## Catalyst-Inspired Shell Checkpoint
+
+2026-07-01:
+
+- Reworked the shared app shell toward the Tailwind Catalyst reference supplied by the user: neutral gray canvas, full-height sidebar, white work area, icon+text navigation, sidebar user footer and compact top actions.
+- Standardized global component classes for buttons, inputs, panels, metrics, tables, badges and status notices to reduce page-by-page style drift.
+- Disabled the Next.js dev indicator for local product screenshots.
+- Added `docs/design/ui-productization-matrix.md` implementation ledger documenting Catalyst-inspired traits and the boundary against copying proprietary Catalyst source.
+- Captured new visual evidence: `docs/uat-evidence/screenshots/13-catalyst-student-home.png`, `docs/uat-evidence/screenshots/14-catalyst-teacher-dashboard.png`, `docs/uat-evidence/screenshots/15-catalyst-admin-console.png`.

@@ -8,6 +8,20 @@ Build a school-pilot-ready English AI Writing Platform for W F Joseph Lee Primar
 
 Interactivity target: full working UAT flows, not static mockups.
 
+## Catalyst-Inspired Implementation Ledger
+
+Reference: Tailwind Plus Catalyst screenshots supplied by the user on 2026-07-01.
+
+| Reference trait | Local implementation rule |
+| --- | --- |
+| Rounded application frame on a neutral gray canvas | Use one full-height app frame with light gray sidebar and white content workspace. |
+| Left sidebar with icon + text navigation | Use role-safe sidebar items with code-owned SVG icons and visible labels. |
+| Bottom user block in sidebar | Show role user identity in sidebar footer; keep logout in the top action area. |
+| Overview metrics with thin top rules | Prefer subtle divided metrics over floating card grids for dashboards. |
+| Forms, buttons and tables with restrained borders and small shadows | Standardize `btn`, `form-control`, `table-shell`, `status-pill` and panel classes globally. |
+| Professional density | Teacher/Admin pages can be denser and table-first; Student pages keep fewer choices and larger task actions. |
+| Proprietary Catalyst source | Do not copy source or component APIs from Catalyst; build project-owned React/Tailwind components. |
+
 ## Page Inventory
 
 | # | Surface | Route / component | Primary role | Current status | Productization priority |
