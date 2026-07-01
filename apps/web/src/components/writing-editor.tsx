@@ -169,8 +169,7 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
       immediatelyRender: false,
       editorProps: {
         attributes: {
-          class:
-            "min-h-[360px] rounded-md border border-ink/10 bg-paper px-4 py-4 text-base leading-7 text-ink outline-none",
+          class: "writing-document",
         },
         handlePaste: () => {
           if (expectedMode === "EXAM") {
@@ -386,17 +385,21 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
   const modeLabel = expectedMode === "PRACTICE" ? "Practice Mode" : "Exam Mode";
 
   return (
-    <main className="app-shell" data-testid="writing-editor-page">
-      <header className="app-header">
+    <main className="writer-shell" data-testid="writing-editor-page">
+      <header className="writer-topbar">
         <div>
-          <p className="eyebrow">W F Joseph Lee Primary School</p>
+          <p className="page-kicker">W F Joseph Lee Primary School</p>
           <h1 className="page-title">{task.title}</h1>
-          <p className="mt-2 text-sm font-semibold text-coral">{modeLabel}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className={expectedMode === "EXAM" ? "status-pill-warning" : "status-pill"}>{modeLabel}</span>
+            <span className="status-pill-muted">{task.rubric_title ?? "School rubric"}</span>
+            {locked ? <span className="status-pill">Submitted and locked</span> : null}
+          </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="writer-actions">
           {remainingSeconds !== null ? (
             <span
-              className="rounded-md border border-coral/30 bg-paper px-4 py-2 text-sm font-semibold text-coral"
+              className="writer-timer"
               data-testid="exam-timer"
             >
               {formatTimer(remainingSeconds)}
@@ -408,52 +411,69 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
         </div>
       </header>
 
-      <section className="grid gap-5 py-6 lg:grid-cols-[1fr_320px]">
-        <div>
-          <div className="mb-3 flex flex-wrap items-center gap-3 text-sm text-ink/65">
-            <span>{wordCount} words</span>
-            <span>Autosave: {saveState}</span>
-            {locked ? <span className="font-semibold text-moss">Submitted and locked</span> : null}
+      <section className="writer-board">
+        <div className="writer-main">
+          <div className="writer-toolbar">
+            <div className="writer-status-card">
+              <p className="writer-status-label">Words</p>
+              <p className="writer-status-value">{wordCount}</p>
+            </div>
+            <div className="writer-status-card">
+              <p className="writer-status-label">Autosave</p>
+              <p className="writer-status-value">{saveState}</p>
+            </div>
+            <div className="writer-status-card">
+              <p className="writer-status-label">Mode rule</p>
+              <p className="writer-status-value">
+                {expectedMode === "EXAM" ? "Suggestions off" : "Suggestions after pause"}
+              </p>
+            </div>
           </div>
           {expectedMode === "EXAM" ? (
             <div
-              className="mb-4 rounded-md border border-coral/20 bg-paper px-4 py-3 text-sm font-semibold text-coral"
+              className="mb-4 rounded-md border border-coral/20 bg-coral/5 px-4 py-3 text-sm font-semibold text-coral"
               data-testid="exam-mode-notice"
             >
               This is Exam Mode. AI writing suggestions are disabled. Paste is blocked.
             </div>
           ) : null}
-          <div data-testid="editor-content">
+          <div className="editor-frame" data-testid="editor-content">
             <EditorContent editor={editor} />
           </div>
-          <button
-            type="button"
-            onClick={() => void onSubmit()}
-            disabled={locked}
-            className="mt-4 btn btn-primary btn-lg disabled:cursor-not-allowed disabled:bg-ink/25"
-            data-testid="submit-writing"
-          >
-            Submit writing
-          </button>
-          {locked && submissionId ? (
-            <Link
-              href={`/student/submissions/${submissionId}/feedback`}
-              className="ml-3 mt-4 inline-flex btn btn-outline btn-lg"
-              data-testid="view-feedback"
+          <div className="writer-submit-row">
+            <button
+              type="button"
+              onClick={() => void onSubmit()}
+              disabled={locked}
+              className="btn btn-primary btn-lg disabled:cursor-not-allowed disabled:bg-ink/25"
+              data-testid="submit-writing"
             >
-              View released feedback
-            </Link>
-          ) : null}
+              Submit writing
+            </button>
+            {locked && submissionId ? (
+              <Link
+                href={`/student/submissions/${submissionId}/feedback`}
+                className="inline-flex btn btn-outline btn-lg"
+                data-testid="view-feedback"
+              >
+                View released feedback
+              </Link>
+            ) : null}
+          </div>
         </div>
 
-        <aside className="section-card">
-          <h2 className="text-lg font-semibold text-ink">Writing instruction</h2>
-          <p className="mt-3 text-sm leading-6 text-ink/70">{task.instruction}</p>
-          <div className="mt-5 rounded-md bg-chalk p-3 text-sm text-ink/65">
-            {task.word_minimum ?? "-"}-{task.word_maximum ?? "-"} words · {task.rubric_title ?? "School rubric"}
+        <aside className="writer-aside">
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Writing instruction</h2>
+              <p className="panel-subtitle">
+                {task.word_minimum ?? "-"}-{task.word_maximum ?? "-"} words
+              </p>
+            </div>
           </div>
+          <p className="mt-4 text-sm leading-6 text-ink/70">{task.instruction}</p>
           {expectedMode === "PRACTICE" ? (
-            <div className="mt-5">
+            <div className="suggestion-panel">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-base font-semibold text-ink">Suggestions</h3>
                 <button
@@ -490,7 +510,7 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
                 {suggestions.map((suggestion) => (
                   <article
                     key={suggestion.id}
-                    className="rounded-md border border-ink/10 bg-chalk p-3"
+                    className="suggestion-card"
                     data-testid="suggestion-card"
                   >
                     <div className="flex items-start justify-between gap-3">
@@ -530,7 +550,16 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
                 ))}
               </div>
             </div>
-          ) : null}
+          ) : (
+            <div className="suggestion-panel">
+              <h3 className="text-base font-semibold text-ink">Exam controls</h3>
+              <div className="mt-3 grid gap-3 text-sm text-ink/70">
+                <div className="muted-panel">Real-time suggestions and AI rewrite are disabled.</div>
+                <div className="muted-panel">Paste attempts are blocked and logged for teacher review.</div>
+                <div className="muted-panel">Window focus changes are logged during the writing session.</div>
+              </div>
+            </div>
+          )}
         </aside>
       </section>
     </main>

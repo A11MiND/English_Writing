@@ -72,37 +72,48 @@ export function StudentFeedback({ submissionId }: { submissionId: string }) {
   const marking = feedback.marking_result;
 
   return (
-    <main className="app-shell-narrow" data-testid="released-feedback">
-      <header className="app-header">
+    <main className="feedback-shell" data-testid="released-feedback">
+      <header className="portal-topbar">
         <div>
-          <p className="eyebrow">W F Joseph Lee Primary School</p>
+          <p className="page-kicker">W F Joseph Lee Primary School</p>
           <h1 className="page-title">{feedback.task.title}</h1>
-          <p className="mt-2 text-sm font-semibold text-coral">Released feedback</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <span className="status-pill">Released feedback</span>
+            <span className="status-pill-muted">{feedback.task.mode}</span>
+          </div>
         </div>
-        <button type="button" onClick={onLogout} className="btn btn-secondary w-fit">
-          Logout
-        </button>
+        <div className="topbar-actions">
+          <button type="button" onClick={onLogout} className="btn btn-secondary w-fit">
+            Logout
+          </button>
+        </div>
       </header>
 
       {notice ? <div className="mt-5 notice-success">{notice}</div> : null}
 
-      <section className="grid gap-5 py-6 md:grid-cols-4">
+      <section className="grid gap-4 py-5 md:grid-cols-4">
         {[
           ["Content", review.content_score ?? marking.content_score],
           ["Language", review.language_score ?? marking.language_score],
           ["Organisation", review.organisation_score ?? marking.organisation_score],
           ["Total", review.total_score ?? marking.total_score],
         ].map(([label, value]) => (
-          <div key={label} className="section-card">
-            <p className="text-sm font-semibold text-ink/55">{label}</p>
-            <p className="page-title">{value ?? "-"}</p>
+          <div key={label} className="metric-card">
+            <p className="metric-label">{label}</p>
+            <p className="metric-value">{value ?? "-"}</p>
+            <p className="metric-hint">Teacher-released result</p>
           </div>
         ))}
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[1fr_0.9fr]">
         <div className="section-card">
-          <h2 className="text-xl font-semibold text-ink">Feedback</h2>
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Feedback</h2>
+              <p className="panel-subtitle">Teacher-controlled feedback from AI marking and review.</p>
+            </div>
+          </div>
           <div className="mt-4 grid gap-4 text-sm leading-6 text-ink/75">
             <p>{marking.content_feedback}</p>
             <p>{marking.language_feedback}</p>
@@ -112,7 +123,13 @@ export function StudentFeedback({ submissionId }: { submissionId: string }) {
         </div>
 
         <div className="section-card">
-          <h2 className="text-xl font-semibold text-ink">Post-writing exercises</h2>
+          <div className="panel-header">
+            <div>
+              <h2 className="panel-title">Post-writing exercises</h2>
+              <p className="panel-subtitle">Complete focused follow-up practice after teacher release.</p>
+            </div>
+            <span className="status-pill-muted">{feedback.exercises.length} exercises</span>
+          </div>
           <div className="mt-4 grid gap-4">
             {feedback.exercises.map((exercise) => (
               <div key={exercise.id} className="muted-panel" data-testid="exercise-card">
@@ -126,7 +143,7 @@ export function StudentFeedback({ submissionId }: { submissionId: string }) {
                   value={responses[exercise.id] ?? ""}
                   onChange={(event) => setResponses((current) => ({ ...current, [exercise.id]: event.target.value }))}
                   rows={3}
-                  className="mt-3 w-full rounded-md border border-ink/15 bg-paper px-3 py-2 text-sm"
+                  className="mt-3 w-full form-control"
                   placeholder="Write your answer"
                   data-testid="exercise-response"
                 />
