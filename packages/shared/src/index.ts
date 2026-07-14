@@ -62,6 +62,20 @@ export type AuthPayload = {
   user: AuthenticatedUser;
 };
 
+export type AccountCapabilities = {
+  plan_code: "FREE" | "SCHOOL_PRO" | string;
+  subscription_status: string;
+  subscription_renews_at: string | null;
+  features: {
+    grammar_check: boolean;
+    ai_assist: boolean;
+    read_aloud: boolean;
+    image_generation: boolean;
+    ai_marking: boolean;
+    reports: boolean;
+  };
+};
+
 export type SchoolClass = {
   id: string;
   name: string;
@@ -70,6 +84,17 @@ export type SchoolClass = {
   status: string;
   teacher_count?: number;
   student_count?: number;
+};
+
+export type TeacherStudent = {
+  id: string;
+  display_name: string;
+  email: string;
+  status: AccountStatus;
+  student_number: string;
+  level: string;
+  class_id: string;
+  class_name: string;
 };
 
 export type AdminUser = {
@@ -122,9 +147,23 @@ export type AiServiceStatus = {
   configured: boolean;
   api_key_configured: boolean;
   base_url_configured: boolean;
+  source?: "database" | "environment" | "invalid" | string;
+  masked_api_key?: string | null;
   last_call_status: "SUCCESS" | "FAILED" | string | null;
   last_error_category: string | null;
   last_called_at: string | null;
+};
+
+export type AiSettings = {
+  provider: string;
+  provider_display_name: string;
+  model: string | null;
+  base_url: string | null;
+  timeout_seconds: number;
+  configured: boolean;
+  api_key_configured: boolean;
+  masked_api_key: string | null;
+  source: "database" | "environment" | "invalid" | string;
 };
 
 export type StudentProfilePayload = {
@@ -173,6 +212,7 @@ export type WritingTask = {
   exam_duration_minutes: number | null;
   rubric_id: string;
   rubric_title: string | null;
+  rubric_total_score: number | null;
   status: WritingTaskStatus;
   assigned_classes: string[];
   draft_status?: "ACTIVE" | "SUBMITTED" | null;
@@ -182,6 +222,7 @@ export type WritingTask = {
   submitted_at?: string | null;
   locked?: boolean;
   feedback_released?: boolean;
+  image_url?: string | null;
 };
 
 export type TaskAssignment = {
@@ -217,6 +258,68 @@ export type WritingWorkspace = {
   locked: boolean;
 };
 
+export type PersonalPracticeFocus =
+  | "PAST_TENSE"
+  | "STRONGER_FEELINGS"
+  | "STORY_ORDER"
+  | "BETTER_DESCRIPTIONS";
+
+export type PersonalPracticeGenre = "NARRATIVE" | "DESCRIPTION" | "LETTER";
+
+export type PersonalPracticeTask = WritingTask & {
+  personal_practice: true;
+  practice_focus: string;
+  practice_genre?: string;
+  duration_minutes?: number;
+  structure?: string[];
+  marking_result?: PersonalPracticeMarking | null;
+};
+
+export type PersonalPracticeMarking = {
+  id: string;
+  status: MarkingStatus;
+  content_score: number | null;
+  language_score: number | null;
+  organisation_score: number | null;
+  total_score: number | null;
+  content_feedback: string | null;
+  language_feedback: string | null;
+  organisation_feedback: string | null;
+  strengths: string[];
+  weaknesses: string[];
+  sentence_level_comments: AiMarkingOutput["sentence_level_comments"];
+  recommended_exercises: AiMarkingOutput["recommended_exercises"];
+  marked_at: string | null;
+};
+
+export type PersonalPracticeResult = {
+  task: {
+    id: string;
+    title: string;
+    instruction: string;
+    level: string;
+    practice_focus: string;
+    rubric_total_score: number;
+    rubric_dimensions: Array<Pick<RubricDimension, "name" | "min_score" | "max_score">>;
+  };
+  submission: {
+    id: string;
+    content_text: string;
+    word_count: number;
+    submitted_at: string;
+  } | null;
+  marking_result: PersonalPracticeMarking | null;
+};
+
+export type StudentRewriteGoal = "CLEARER" | "MORE_DESCRIPTIVE" | "FRIENDLIER" | "MORE_FORMAL";
+
+export type StudentRewrite = {
+  original: string;
+  revised: string;
+  explanation: string;
+  goal: StudentRewriteGoal;
+};
+
 export type GrammarSuggestion = {
   id: string;
   rule_id: string;
@@ -227,6 +330,17 @@ export type GrammarSuggestion = {
   length: number;
   replacements: string[];
   severity: "INFO" | "WARNING" | "ERROR";
+  level: "WORD" | "SENTENCE";
+};
+
+export type ParagraphSuggestion = {
+  id: string;
+  level: "PARAGRAPH";
+  focus: "FOCUS" | "FLOW" | "ORDER" | "REPETITION" | "LINKING";
+  title: string;
+  message: string;
+  evidence: string;
+  action: string;
 };
 
 export type SuggestionCheckMode = "CHANGED" | "FULL";
@@ -236,6 +350,12 @@ export type SuggestionCheckPayload = {
   cached: boolean;
   service_status: "ok" | "unavailable";
   check_mode: SuggestionCheckMode;
+};
+
+export type ParagraphCheckPayload = {
+  suggestions: ParagraphSuggestion[];
+  cached: boolean;
+  service_status: "ok" | "fallback";
 };
 
 export type ExamEventType =
@@ -260,11 +380,30 @@ export type TeacherSubmissionExamEvents = {
   events: TeacherExamEventRecord[];
 };
 
+export type PromptDraft = {
+  id: string;
+  level: string;
+  mode: WritingMode;
+  teaching_focus: string;
+  word_minimum: number | null;
+  word_maximum: number | null;
+  exam_duration_minutes: number | null;
+  rubric_id: string;
+  title: string;
+  instruction: string;
+  rubric_notes: string[];
+  provider: string;
+  model: string;
+  status: "DRAFT" | "USED" | "ARCHIVED" | string;
+  created_at: string;
+};
+
 export const llmProviders = [
   "openai_compatible",
   "deepseek",
   "qwen",
   "doubao",
+  "minimax",
 ] as const;
 
 export type LlmProvider = (typeof llmProviders)[number];
@@ -329,6 +468,26 @@ export type MarkingResult = Omit<
   marked_at: string | null;
 };
 
+export type ReleasedStudentMarking = {
+  id: string;
+  submission_id: string;
+  task_id: string;
+  student_id: string;
+  status: MarkingStatus;
+  content_score: number | null;
+  language_score: number | null;
+  organisation_score: number | null;
+  total_score: number | null;
+  content_feedback: string | null;
+  language_feedback: string | null;
+  organisation_feedback: string | null;
+  strengths: string[];
+  weaknesses: string[];
+  sentence_level_comments: AiMarkingOutput["sentence_level_comments"];
+  recommended_exercises: AiMarkingOutput["recommended_exercises"];
+  marked_at: string | null;
+};
+
 export type TeacherMarkingSubmission = {
   submission: Submission & {
     task_id: string;
@@ -339,6 +498,12 @@ export type TeacherMarkingSubmission = {
     title: string;
     mode: WritingMode;
     level: string;
+    rubric: {
+      id: string;
+      title: string;
+      total_score: number;
+      dimensions: RubricDimension[];
+    };
   };
   class_name: string;
   marking_result: MarkingResult | null;
@@ -393,7 +558,7 @@ export type StudentFeedback = {
     word_count: number;
     submitted_at: string;
   };
-  marking_result: MarkingResult;
+  marking_result: ReleasedStudentMarking;
   review: TeacherReview;
   exercises: PostWritingExercise[];
 };
@@ -406,6 +571,8 @@ export type ClassReportSummary = {
   completion_rate: number;
   scored_submission_count: number;
   average_total_score: number | null;
+  average_total_percentage: number | null;
+  maximum_total_score: number | null;
 };
 
 export type ClassReportPayload = {
@@ -422,8 +589,14 @@ export type ClassReportPayload = {
   summary: ClassReportSummary;
   rubric_breakdown: {
     content_average: number | null;
+    content_average_percentage: number | null;
+    content_max_score: number | null;
     language_average: number | null;
+    language_average_percentage: number | null;
+    language_max_score: number | null;
     organisation_average: number | null;
+    organisation_average_percentage: number | null;
+    organisation_max_score: number | null;
   };
   score_distribution: Record<string, number>;
   common_weaknesses: Array<{
@@ -444,6 +617,12 @@ export type ClassReportPayload = {
     language_score: number | null;
     organisation_score: number | null;
     total_score: number | null;
+    content_max_score: number;
+    language_max_score: number;
+    organisation_max_score: number;
+    total_max_score: number;
+    rubric_id: string;
+    rubric_title: string;
     review_status: string | null;
     marking_status: string | null;
   }>;

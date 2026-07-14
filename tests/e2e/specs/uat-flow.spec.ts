@@ -23,6 +23,12 @@ type SchoolClass = { id: string; name: string };
 type WritingTask = { id: string; title: string };
 
 test.describe.configure({ mode: "serial" });
+test.beforeEach(() => {
+  test.skip(
+    process.env.RUN_LIVE_UAT !== "1",
+    "Set RUN_LIVE_UAT=1 for the stateful, real-provider school UAT. Deterministic demo acceptance runs by default.",
+  );
+});
 
 async function login(page: Page, email: string) {
   await page.goto("/");
@@ -46,8 +52,8 @@ async function expectNoBrowserStoredToken(page: Page) {
 }
 
 async function showAllStudentTasksIfAvailable(page: Page) {
-  await expect(page.getByRole("heading", { name: "Student home" })).toBeVisible();
-  const showAll = page.getByTestId("student-show-all-tasks");
+  await expect(page.getByRole("heading", { name: "Your next story starts here." })).toBeVisible();
+  const showAll = page.getByRole("button", { name: /Show all .* tasks/ });
   if ((await showAll.count()) > 0) {
     await showAll.first().click();
   }
@@ -143,27 +149,30 @@ test("student completes Practice Mode with grammar suggestion and locked submiss
   test.setTimeout(90_000);
 
   await login(page, studentEmail);
-  await expect(page).toHaveURL(/\/student$/);
-  await expect(page.getByRole("heading", { name: "Student home" })).toBeVisible();
+  await expect(page).toHaveURL(/\/student\/writing$/);
+  await expect(page.getByRole("heading", { name: "Your next story starts here." })).toBeVisible();
   await showAllStudentTasksIfAvailable(page);
 
-  const taskCard = page.getByTestId("student-task-practice").filter({ hasText: practiceTitle }).first();
+  const taskCard = page.locator("article.task-card").filter({ hasText: practiceTitle }).first();
   await expect(taskCard).toBeVisible();
-  await taskCard.getByTestId("open-practice-task").click();
+  await taskCard.getByRole("link").first().click();
   await expect(page.getByTestId("writing-editor-page")).toBeVisible();
 
   const editor = page.locator('[data-testid="editor-content"] .ProseMirror');
-  await editor.fill("I has a apple. Yesterday I go to the library and learn many thing.");
+  await editor.fill(
+    "Yesterday I go to the library because our class needed facts for a science project. I has a notebook, two pencils, and a list of questions from my group. First, I searched for a book about volcanoes and read the pictures carefully. Then I wrote down useful details and checked another book for more examples. A librarian showed me how to use the index, so I found the right pages quickly. Finally, I returned to class and shared my notes with everyone. We used the facts to make a clear poster, and I felt proud because my research helped the whole group finish our project on time.",
+  );
   await page.getByTestId("full-check-button").click();
-  await expect(page.getByTestId("suggestion-card").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("sentence-suggestion-card").first()).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("accept-suggestion").first().click();
 
   await page.getByTestId("submit-writing").click();
-  await expect(page.getByText("Submitted and locked")).toBeVisible();
+  await page.getByRole("button", { name: "Submit now" }).click();
+  await expect(page.getByTestId("submit-writing")).toHaveText("Submitted");
   const feedbackLink = page.getByTestId("view-feedback");
   await expect(feedbackLink).toBeVisible();
   practiceFeedbackHref = (await feedbackLink.getAttribute("href")) ?? "";
-  expect(practiceFeedbackHref).toContain("/student/submissions/");
+  expect(practiceFeedbackHref).toContain("/student/feedback/");
   await logout(page);
 });
 
@@ -171,14 +180,14 @@ test("student completes Exam Mode, paste is blocked and timer auto-submits", asy
   test.setTimeout(90_000);
 
   await login(page, studentEmail);
-  await expect(page).toHaveURL(/\/student$/);
-  await expect(page.getByRole("heading", { name: "Student home" })).toBeVisible();
+  await expect(page).toHaveURL(/\/student\/writing$/);
+  await expect(page.getByRole("heading", { name: "Your next story starts here." })).toBeVisible();
   await showAllStudentTasksIfAvailable(page);
 
-  const taskCard = page.getByTestId("student-task-exam").filter({ hasText: examTitle }).first();
+  const taskCard = page.locator("article.task-card").filter({ hasText: examTitle }).first();
   await expect(taskCard).toBeVisible();
-  await taskCard.getByTestId("open-exam-task").click();
-  await expect(page.getByTestId("exam-mode-notice")).toBeVisible();
+  await taskCard.getByRole("link").first().click();
+  await expect(page.getByText("AI suggestions and rewrite support are disabled.")).toBeVisible();
   await expect(page.getByTestId("full-check-button")).toHaveCount(0);
 
   const editor = page.locator('[data-testid="editor-content"] .ProseMirror');

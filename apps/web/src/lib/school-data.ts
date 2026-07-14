@@ -1,5 +1,7 @@
 import type {
   AdminUser,
+  AccountCapabilities,
+  AiSettings,
   AiServiceStatus,
   ApiResponse,
   ClassReportPayload,
@@ -16,14 +18,23 @@ import type {
   ExamEventType,
   Submission,
   MarkingResult,
+  PersonalPracticeFocus,
+  PersonalPracticeGenre,
+  PersonalPracticeResult,
+  PersonalPracticeTask,
+  ParagraphCheckPayload,
   PostWritingExercise,
+  PromptDraft,
   StudentFeedback,
+  StudentRewrite,
+  StudentRewriteGoal,
   SuggestionCheckMode,
   SuggestionCheckPayload,
   TeacherDashboardSummary,
   TeacherSubmissionExamEvents,
   TeacherMarkingSubmission,
   TeacherReview,
+  TeacherStudent,
   WritingTask,
   WritingWorkspace,
 } from "@english-ai-writing/shared";
@@ -192,6 +203,55 @@ export async function getAiServiceStatus(): Promise<AiServiceStatus> {
   return body.data;
 }
 
+export async function getAiSettings(): Promise<AiSettings> {
+  const response = await fetch(`${apiBaseUrl}/api/admin/ai/settings`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  const body = await parseApiResponse<AiSettings>(response);
+  if (!body.success) throw new Error(body.message);
+  return body.data;
+}
+
+export async function updateAiSettings(payload: {
+  provider: string;
+  model?: string | null;
+  base_url?: string | null;
+  api_key?: string | null;
+  clear_api_key?: boolean;
+  timeout_seconds: number;
+}): Promise<AiSettings> {
+  const response = await fetch(`${apiBaseUrl}/api/admin/ai/settings`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await parseApiResponse<AiSettings>(response);
+  if (!body.success) throw new Error(body.message);
+  return body.data;
+}
+
+export async function testAiConnection(): Promise<{
+  ok: boolean;
+  provider: string;
+  model: string;
+  message: string;
+}> {
+  const response = await fetch(`${apiBaseUrl}/api/admin/ai/test`, {
+    method: "POST",
+    credentials: "include",
+  });
+  const body = await parseApiResponse<{
+    ok: boolean;
+    provider: string;
+    model: string;
+    message: string;
+  }>(response);
+  if (!body.success) throw new Error(body.message);
+  return body.data;
+}
+
 export async function updateUserStatus(
   userId: string,
   status: "ACTIVE" | "SUSPENDED" | "ARCHIVED",
@@ -232,6 +292,44 @@ export async function listTeacherClasses(): Promise<SchoolClass[]> {
   const body = await parseApiResponse<{ classes: SchoolClass[] }>(response);
   if (!body.success) throw new Error(body.message);
   return body.data.classes;
+}
+
+export async function getAccountCapabilities(): Promise<AccountCapabilities> {
+  const response = await fetch(`${apiBaseUrl}/api/account/capabilities`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  const body = await parseApiResponse<AccountCapabilities>(response);
+  if (!body.success) throw new Error(body.message);
+  return body.data;
+}
+
+export async function listTeacherStudents(): Promise<TeacherStudent[]> {
+  const response = await fetch(`${apiBaseUrl}/api/teacher/students`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  const body = await parseApiResponse<{ students: TeacherStudent[] }>(response);
+  if (!body.success) throw new Error(body.message);
+  return body.data.students;
+}
+
+export async function createTeacherStudent(payload: {
+  display_name: string;
+  email: string;
+  temporary_password: string;
+  class_id: string;
+  student_number?: string;
+}): Promise<TeacherStudent> {
+  const response = await fetch(`${apiBaseUrl}/api/teacher/students`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await parseApiResponse<{ student: TeacherStudent }>(response);
+  if (!body.success) throw new Error(body.message);
+  return body.data.student;
 }
 
 export async function getStudentProfile(): Promise<StudentProfilePayload["profile"]> {
@@ -380,6 +478,20 @@ export async function updateTask(
   return body.data.task;
 }
 
+export async function generateTaskImage(taskId: string): Promise<string> {
+  const response = await fetch(`${apiBaseUrl}/api/teacher/tasks/${taskId}/image`, {
+    method: "POST",
+    credentials: "include",
+  });
+  const body = await parseApiResponse<{ image_url: string }>(response);
+  if (!body.success) throw new Error(body.message);
+  return body.data.image_url;
+}
+
+export function authenticatedMediaUrl(path: string | null | undefined): string | null {
+  return path ? `${apiBaseUrl}${path}` : null;
+}
+
 export async function assignTask(taskId: string, classId: string): Promise<TaskAssignment> {
   const response = await fetch(`${apiBaseUrl}/api/teacher/tasks/${taskId}/assignments`, {
     method: "POST",
@@ -392,6 +504,26 @@ export async function assignTask(taskId: string, classId: string): Promise<TaskA
   return body.data.assignment;
 }
 
+export async function generatePromptDraft(payload: {
+  level: string;
+  mode: "PRACTICE" | "EXAM";
+  teaching_focus: string;
+  word_minimum?: number | null;
+  word_maximum?: number | null;
+  exam_duration_minutes?: number | null;
+  rubric_id: string;
+}): Promise<PromptDraft> {
+  const response = await fetch(`${apiBaseUrl}/api/teacher/questions/generate`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await parseApiResponse<{ prompt_draft: PromptDraft }>(response);
+  if (!body.success) throw new Error(body.message);
+  return body.data.prompt_draft;
+}
+
 export async function listStudentTasks(): Promise<WritingTask[]> {
   const response = await fetch(`${apiBaseUrl}/api/student/tasks`, {
     credentials: "include",
@@ -400,6 +532,58 @@ export async function listStudentTasks(): Promise<WritingTask[]> {
   const body = await parseApiResponse<{ tasks: WritingTask[] }>(response);
   if (!body.success) throw new Error(body.message);
   return body.data.tasks;
+}
+
+export async function generatePersonalPractice(payload: {
+  focus: PersonalPracticeFocus;
+  genre: PersonalPracticeGenre;
+  duration_minutes: 10 | 15 | 20;
+}): Promise<PersonalPracticeTask> {
+  const response = await fetch(`${apiBaseUrl}/api/student/practice/generate`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await parseApiResponse<{ practice: PersonalPracticeTask }>(response);
+  if (!body.success) throw new Error(body.message);
+  return body.data.practice;
+}
+
+export async function listPersonalPractice(): Promise<PersonalPracticeTask[]> {
+  const response = await fetch(`${apiBaseUrl}/api/student/practice`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  const body = await parseApiResponse<{ items: PersonalPracticeTask[] }>(response);
+  if (!body.success) throw new Error(body.message);
+  return body.data.items;
+}
+
+export async function getPersonalPracticeResult(taskId: string): Promise<PersonalPracticeResult> {
+  const response = await fetch(`${apiBaseUrl}/api/student/practice/${taskId}/result`, {
+    credentials: "include",
+    cache: "no-store",
+  });
+  const body = await parseApiResponse<PersonalPracticeResult>(response);
+  if (!body.success) throw new Error(body.message);
+  return body.data;
+}
+
+export async function rewriteStudentText(payload: {
+  task_id: string;
+  text: string;
+  goal: StudentRewriteGoal;
+}): Promise<StudentRewrite> {
+  const response = await fetch(`${apiBaseUrl}/api/student/rewrite`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const body = await parseApiResponse<{ rewrite: StudentRewrite }>(response);
+  if (!body.success) throw new Error(body.message);
+  return body.data.rewrite;
 }
 
 export function countWords(text: string): number {
@@ -433,7 +617,12 @@ export async function saveDraft(
 
 export async function submitWriting(
   taskId: string,
-  payload: { content_html: string; content_text: string; word_count: number },
+  payload: {
+    content_html: string;
+    content_text: string;
+    word_count: number;
+    submission_trigger?: "MANUAL" | "TIMER";
+  },
 ): Promise<Submission> {
   const response = await fetch(`${apiBaseUrl}/api/student/tasks/${taskId}/submit`, {
     method: "POST",
@@ -485,6 +674,21 @@ export async function checkWritingSuggestions(
     body: JSON.stringify({ task_id: taskId, text, check_mode: checkMode }),
   });
   const body = await parseApiResponse<SuggestionCheckPayload>(response);
+  if (!body.success) throw new Error(body.message);
+  return body.data;
+}
+
+export async function checkParagraphSuggestions(
+  taskId: string,
+  text: string,
+): Promise<ParagraphCheckPayload> {
+  const response = await fetch(`${apiBaseUrl}/api/suggestions/paragraph`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ task_id: taskId, text }),
+  });
+  const body = await parseApiResponse<ParagraphCheckPayload>(response);
   if (!body.success) throw new Error(body.message);
   return body.data;
 }

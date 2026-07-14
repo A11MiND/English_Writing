@@ -4,7 +4,12 @@ import pytest
 from fastapi import HTTPException
 
 from auth_service.hash_password import hash_password
-from auth_service.main import IdentityStore, Settings
+from auth_service.main import (
+    IdentityStore,
+    RegisterIdentityRequest,
+    Settings,
+    persist_registered_identity,
+)
 
 
 def user_payload(email: str = "test.user@example.edu") -> dict:
@@ -52,3 +57,29 @@ def test_identity_store_rejects_suspended_file_user(tmp_path) -> None:
         store.authenticate("suspended@example.edu", "Password123!")
 
     assert exc.value.status_code == 403
+
+
+def test_registered_identity_is_hashed_and_persists(tmp_path) -> None:
+    registered_path = tmp_path / "registered-users.json"
+    settings = Settings(
+        openauth_users_json="[]",
+        openauth_registered_users_json_file=str(registered_path),
+    )
+    store = IdentityStore.from_settings(settings)
+
+    persist_registered_identity(
+        RegisterIdentityRequest(
+            email="new.pupil@example.edu",
+            password="Password123!",
+            user_id="99999999-2222-4333-8444-555555555555",
+            school_id="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            role="STUDENT",
+        ),
+        settings,
+        store,
+    )
+
+    persisted = json.loads(registered_path.read_text(encoding="utf-8"))[0]
+    assert persisted["password_hash"] != "Password123!"
+    reloaded = IdentityStore.from_settings(settings)
+    assert reloaded.authenticate("new.pupil@example.edu", "Password123!").role == "STUDENT"

@@ -97,6 +97,7 @@ def test_practice_mode_suggestions_return_normalized_spans_and_exam_rejects() ->
     assert len(body["suggestions"]) >= 1
     assert all(row["offset"] >= 0 and row["length"] >= 1 for row in body["suggestions"])
     assert all(isinstance(row["replacements"], list) for row in body["suggestions"])
+    assert all(row["level"] in {"WORD", "SENTENCE"} for row in body["suggestions"])
 
     denied = student.post(
         "/api/suggestions/check",

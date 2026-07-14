@@ -28,6 +28,13 @@ class School(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     code: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
+    plan_code: Mapped[str] = mapped_column(String(32), nullable=False, default="FREE", index=True)
+    subscription_status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="ACTIVE", index=True
+    )
+    subscription_renews_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     users: Mapped[list["User"]] = relationship(back_populates="school")
@@ -187,6 +194,8 @@ class WritingTask(Base):
     created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="DRAFT", index=True)
     allow_late_submission: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    image_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    image_mime_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
@@ -331,6 +340,51 @@ class AIUsageLog(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class AIProviderSetting(Base):
+    __tablename__ = "ai_provider_settings"
+    __table_args__ = (
+        UniqueConstraint("school_id", name="uq_ai_provider_settings_school"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
+    school_id: Mapped[str] = mapped_column(ForeignKey("schools.id"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    api_key_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class PromptDraft(Base):
+    __tablename__ = "prompt_drafts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
+    school_id: Mapped[str] = mapped_column(ForeignKey("schools.id"), nullable=False, index=True)
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    level: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    mode: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    teaching_focus: Mapped[str] = mapped_column(Text, nullable=False)
+    word_minimum: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    word_maximum: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    exam_duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rubric_id: Mapped[str] = mapped_column(ForeignKey("rubrics.id"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    instruction: Mapped[str] = mapped_column(Text, nullable=False)
+    rubric_notes: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="DRAFT", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
 
 
 class PostWritingExercise(Base):

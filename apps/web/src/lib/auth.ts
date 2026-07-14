@@ -6,7 +6,7 @@ export const apiBaseUrl =
     : process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:8000";
 
 export function routeForRole(role: Role) {
-  if (role === "STUDENT") return "/student";
+  if (role === "STUDENT") return "/student/writing";
   if (role === "TEACHER") return "/teacher";
   return "/admin";
 }

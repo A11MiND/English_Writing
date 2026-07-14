@@ -7,7 +7,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.config import Settings, get_settings
-from app.services.ai_marking_schema import AIMarkingOutput, ai_marking_json_schema, validate_ai_marking_output
+from app.services.ai_marking_schema import ai_marking_json_schema, validate_ai_marking_output
 
 
 LLMProviderId = Literal["openai_compatible", "deepseek", "qwen", "doubao", "minimax"]
@@ -136,7 +136,7 @@ class OpenAICompatibleLLMAdapter:
         }
         response_payload = await self._post_chat_completions(payload)
         content = self._extract_content(response_payload)
-        json_data = self._parse_and_validate_json(content)
+        json_data = self._parse_and_validate_json(content, request.response_schema_name)
         usage_payload = response_payload.get("usage") or {}
         usage = LLMUsage(
             input_tokens=usage_payload.get("prompt_tokens"),
@@ -147,7 +147,7 @@ class OpenAICompatibleLLMAdapter:
             provider=self.provider,
             model=self.model,
             content=content,
-            json_data=json_data.model_dump(),
+            json_data=json_data,
             usage=usage,
             raw_metadata={
                 "id": response_payload.get("id"),
@@ -186,13 +186,17 @@ class OpenAICompatibleLLMAdapter:
             raise LLMProviderError(f"{self.provider} response did not include message content")
         return content
 
-    def _parse_and_validate_json(self, content: str) -> AIMarkingOutput:
+    def _parse_and_validate_json(self, content: str, schema_name: str) -> dict[str, Any]:
         try:
             parsed = json.loads(content)
         except json.JSONDecodeError as exc:
             raise LLMResponseValidationError("LLM output was not valid JSON") from exc
+        if not isinstance(parsed, dict):
+            raise LLMResponseValidationError("LLM output must be a JSON object")
+        if schema_name != "ai_marking_result":
+            return parsed
         try:
-            return validate_ai_marking_output(parsed)
+            return validate_ai_marking_output(parsed).model_dump()
         except ValidationError as exc:
             raise LLMResponseValidationError("LLM output did not match AI marking schema") from exc
 
@@ -217,13 +221,40 @@ def get_llm_adapter(settings: Settings | None = None) -> LLMAdapter:
     if preset.requires_api_key and not settings.llm_api_key:
         raise LLMConfigurationError(f"LLM_API_KEY is required for provider '{preset.id}'")
 
-    return OpenAICompatibleLLMAdapter(
+    return build_llm_adapter(
         provider=preset.id,
         model=model,
         base_url=base_url,
         api_key=settings.llm_api_key or "",
         timeout_seconds=settings.llm_timeout_seconds,
         chat_completions_path=preset.chat_completions_path,
+    )
+
+
+def build_llm_adapter(
+    *,
+    provider: str,
+    model: str | None,
+    base_url: str | None,
+    api_key: str | None,
+    timeout_seconds: float,
+    chat_completions_path: str | None = None,
+) -> LLMAdapter:
+    preset = get_provider_preset(provider)
+    resolved_model = model or preset.default_model
+    resolved_base_url = base_url or preset.base_url
+    if not resolved_base_url:
+        raise LLMConfigurationError(f"LLM_BASE_URL is required for provider '{preset.id}'")
+    if preset.requires_api_key and not api_key:
+        raise LLMConfigurationError(f"LLM_API_KEY is required for provider '{preset.id}'")
+
+    return OpenAICompatibleLLMAdapter(
+        provider=preset.id,
+        model=resolved_model,
+        base_url=resolved_base_url,
+        api_key=api_key or "",
+        timeout_seconds=timeout_seconds,
+        chat_completions_path=chat_completions_path or preset.chat_completions_path,
     )
 
 

@@ -11,11 +11,13 @@ from app.core.auth import Role, require_roles, write_audit_log
 from app.core.database import get_session
 from app.core.responses import ApiException, ErrorCode, success_response
 from app.models import (
+    AIUsageLog,
     Assignment,
     Class,
     ClassMembership,
     Draft,
     MarkingResult,
+    PromptDraft,
     Rubric,
     RubricDimension,
     StudentProfile,
@@ -24,6 +26,8 @@ from app.models import (
     User,
     WritingTask,
 )
+from app.services.ai_settings import get_school_llm_adapter
+from app.services.llm import LLMError, LLMGenerationRequest, LLMMessage
 
 router = APIRouter(prefix="/api", tags=["tasks"])
 
@@ -219,6 +223,41 @@ class AssignTaskRequest(BaseModel):
     class_id: str = Field(min_length=36, max_length=36)
 
 
+class GeneratePromptRequest(BaseModel):
+    level: str = Field(min_length=2, max_length=16)
+    mode: Literal["PRACTICE", "EXAM"]
+    teaching_focus: str = Field(min_length=1, max_length=2000)
+    word_minimum: int | None = Field(default=None, ge=0, le=2000)
+    word_maximum: int | None = Field(default=None, ge=1, le=3000)
+    exam_duration_minutes: int | None = Field(default=None, ge=1, le=240)
+    rubric_id: str = Field(min_length=36, max_length=36)
+
+    @field_validator("level", "teaching_focus")
+    @classmethod
+    def clean_prompt_text(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("level")
+    @classmethod
+    def validate_prompt_level(cls, value: str) -> str:
+        normalized = value.upper()
+        if normalized not in SUPPORTED_LEVELS:
+            raise ValueError("Level must be P4, P5 or P6.")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_prompt_limits(self) -> "GeneratePromptRequest":
+        if (
+            self.word_minimum is not None
+            and self.word_maximum is not None
+            and self.word_maximum < self.word_minimum
+        ):
+            raise ValueError("word_maximum must be greater than or equal to word_minimum.")
+        if self.mode == "EXAM" and self.exam_duration_minutes is None:
+            raise ValueError("exam_duration_minutes is required for Exam Mode prompts.")
+        return self
+
+
 def serialize_dimension(row: RubricDimension) -> dict:
     return {
         "id": row.id,
@@ -257,8 +296,30 @@ def serialize_task(row: WritingTask, class_names: list[str] | None = None) -> di
         "exam_duration_minutes": row.exam_duration_minutes,
         "rubric_id": row.rubric_id,
         "rubric_title": row.rubric.title if row.rubric else None,
+        "rubric_total_score": row.rubric.total_score if row.rubric else None,
         "status": row.status,
         "assigned_classes": class_names or [],
+        "image_url": f"/api/tasks/{row.id}/image" if row.image_path else None,
+    }
+
+
+def serialize_prompt_draft(row: PromptDraft) -> dict:
+    return {
+        "id": row.id,
+        "level": row.level,
+        "mode": row.mode,
+        "teaching_focus": row.teaching_focus,
+        "word_minimum": row.word_minimum,
+        "word_maximum": row.word_maximum,
+        "exam_duration_minutes": row.exam_duration_minutes,
+        "rubric_id": row.rubric_id,
+        "title": row.title,
+        "instruction": row.instruction,
+        "rubric_notes": row.rubric_notes,
+        "provider": row.provider,
+        "model": row.model,
+        "status": row.status,
+        "created_at": row.created_at.isoformat(),
     }
 
 
@@ -566,6 +627,147 @@ async def duplicate_teacher_rubric(
         select(Rubric).options(selectinload(Rubric.dimensions)).where(Rubric.id == duplicate.id)
     )
     return success_response(request, {"rubric": serialize_rubric(result.scalar_one())})
+
+
+@router.post("/teacher/questions/generate")
+async def generate_teacher_question(
+    payload: GeneratePromptRequest,
+    request: Request,
+    user: Annotated[User, Depends(require_roles(Role.TEACHER))],
+    db: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    rubric_result = await db.execute(
+        select(Rubric)
+        .options(selectinload(Rubric.dimensions))
+        .where(
+            Rubric.id == payload.rubric_id,
+            Rubric.school_id == user.school_id,
+            Rubric.status != "ARCHIVED",
+        )
+    )
+    rubric = rubric_result.scalar_one_or_none()
+    if rubric is None:
+        raise ApiException(ErrorCode.NOT_FOUND, "Rubric not found.", 404)
+
+    rubric_summary = "; ".join(
+        f"{dimension.name}: {dimension.min_score}-{dimension.max_score}. {dimension.descriptor}"
+        for dimension in sorted(rubric.dimensions, key=lambda item: item.sort_order)
+    )
+    word_range = (
+        f"{payload.word_minimum or 0}-{payload.word_maximum} words"
+        if payload.word_maximum is not None
+        else f"at least {payload.word_minimum or 0} words"
+    )
+    adapter = await get_school_llm_adapter(db, user.school_id)
+    try:
+        response = await adapter.generate_json(
+            LLMGenerationRequest(
+                response_schema_name="prompt_generation",
+                temperature=0.4,
+                max_tokens=900,
+                messages=[
+                    LLMMessage(
+                        role="system",
+                        content=(
+                            "You generate primary-school English writing task drafts for teachers. "
+                            "Return only JSON with keys: title, instruction, rubric_notes. "
+                            "rubric_notes must be an array of short strings. Do not include markdown."
+                        ),
+                    ),
+                    LLMMessage(
+                        role="user",
+                        content=(
+                            f"Year level: {payload.level}\n"
+                            f"Mode: {payload.mode}\n"
+                            f"Teaching focus: {payload.teaching_focus}\n"
+                            f"Word range: {word_range}\n"
+                            f"Exam time: {payload.exam_duration_minutes or 'not applicable'}\n"
+                            f"Rubric: {rubric_summary}\n"
+                            "Create one age-appropriate writing prompt draft. Avoid adult-only topics."
+                        ),
+                    ),
+                ],
+            )
+        )
+    except LLMError as exc:
+        db.add(
+            AIUsageLog(
+                school_id=user.school_id,
+                provider="unknown",
+                model="unknown",
+                operation="PROMPT_GENERATION",
+                status="FAILED",
+                error_message=str(exc),
+            )
+        )
+        await db.commit()
+        raise ApiException(ErrorCode.AI_MARKING_FAILED, f"Prompt generation failed: {exc}", 422) from exc
+
+    generated = response.json_data
+    title = str(generated.get("title") or "").strip()
+    instruction = str(generated.get("instruction") or "").strip()
+    rubric_notes = generated.get("rubric_notes")
+    if not title or not instruction or not isinstance(rubric_notes, list):
+        db.add(
+            AIUsageLog(
+                school_id=user.school_id,
+                provider=response.provider,
+                model=response.model,
+                operation="PROMPT_GENERATION",
+                prompt_tokens=response.usage.input_tokens,
+                completion_tokens=response.usage.output_tokens,
+                total_tokens=response.usage.total_tokens,
+                status="FAILED",
+                error_message="LLM prompt draft did not include title, instruction and rubric_notes.",
+            )
+        )
+        await db.commit()
+        raise ApiException(
+            ErrorCode.VALIDATION_ERROR,
+            "Generated prompt did not match the required draft format.",
+            422,
+        )
+
+    draft = PromptDraft(
+        school_id=user.school_id,
+        created_by=user.id,
+        level=payload.level,
+        mode=payload.mode,
+        teaching_focus=payload.teaching_focus,
+        word_minimum=payload.word_minimum,
+        word_maximum=payload.word_maximum,
+        exam_duration_minutes=payload.exam_duration_minutes,
+        rubric_id=payload.rubric_id,
+        title=title[:255],
+        instruction=instruction,
+        rubric_notes=[str(note)[:500] for note in rubric_notes],
+        provider=response.provider,
+        model=response.model,
+        status="DRAFT",
+    )
+    db.add(draft)
+    db.add(
+        AIUsageLog(
+            school_id=user.school_id,
+            provider=response.provider,
+            model=response.model,
+            operation="PROMPT_GENERATION",
+            prompt_tokens=response.usage.input_tokens,
+            completion_tokens=response.usage.output_tokens,
+            total_tokens=response.usage.total_tokens,
+            status="SUCCESS",
+        )
+    )
+    await write_audit_log(
+        db,
+        request,
+        "PROMPT_DRAFT_GENERATED",
+        user,
+        {"level": payload.level, "mode": payload.mode, "rubric_id": payload.rubric_id},
+    )
+    await db.commit()
+    await db.refresh(draft)
+    return success_response(request, {"prompt_draft": serialize_prompt_draft(draft)})
 
 
 @router.get("/teacher/tasks")

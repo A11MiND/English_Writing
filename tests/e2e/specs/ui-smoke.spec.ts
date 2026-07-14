@@ -20,42 +20,31 @@ async function expectNoHorizontalOverflow(page: Page) {
   expect(widths.scrollWidth).toBeLessThanOrEqual(widths.clientWidth + 2);
 }
 
-async function showAllStudentTasksIfAvailable(page: Page) {
-  await expect(page.getByRole("heading", { name: "Student home" })).toBeVisible();
-  const showAll = page.getByTestId("student-show-all-tasks");
-  if ((await showAll.count()) > 0) {
-    await showAll.first().click();
-  }
-}
-
 test("teacher desktop shell exposes productized navigation and report controls", async ({ page }) => {
   await login(page, teacherEmail);
   await expect(page).toHaveURL(/\/teacher$/);
-  await expect(page.locator(".portal-sidebar")).toBeVisible();
-  await expect(page.getByRole("link", { name: /Reports/ })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Marking/ })).toBeVisible();
-  await expect(page.getByTestId("teacher-workbench-overview")).toBeVisible();
-  await expect(page.getByText("Things to do")).toBeVisible();
-  await page.getByTestId("teacher-workbench-reports").click();
+  await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
+  await expect(page.locator(".sidebar")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Prepare & assign" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Review writing" })).toBeVisible();
+  await page.getByRole("link", { name: "Class insights", exact: true }).click();
+  await expect(page).toHaveURL(/\/teacher\/reports$/);
+  await expect(page.getByRole("heading", { name: "Class insights" })).toBeVisible();
   await expect(page.getByTestId("report-generate")).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
 
-test("student mobile shell and practice editor avoid horizontal overflow", async ({ page }) => {
+test("student mobile shell and personal-practice builder avoid horizontal overflow", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page, studentEmail);
-  await expect(page).toHaveURL(/\/student$/);
-  await expect(page.getByRole("heading", { name: "Student home" })).toBeVisible();
-  await expect(page.locator(".mobile-section-nav")).toBeVisible();
+  await expect(page).toHaveURL(/\/student\/writing$/);
+  await expect(page.getByRole("heading", { name: "Your next story starts here." })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Page navigation" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
-  await showAllStudentTasksIfAvailable(page);
-
-  const practiceTask = page.getByTestId("student-task-practice").first();
-  await expect(practiceTask).toBeVisible();
-  await practiceTask.getByTestId("open-practice-task").click();
-  await expect(page.getByTestId("writing-editor-page")).toBeVisible();
-  await expect(page.getByTestId("full-check-button")).toBeVisible();
-  await expect(page.getByTestId("exam-mode-notice")).toHaveCount(0);
+  await page.getByRole("link", { name: "My Practice" }).click();
+  await expect(page).toHaveURL(/\/student\/practice$/);
+  await expect(page.getByRole("heading", { name: "Choose one thing to practise today." })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Make my practice" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
 
@@ -63,9 +52,11 @@ test("admin mobile shell keeps import and account controls reachable", async ({ 
   await page.setViewportSize({ width: 390, height: 844 });
   await login(page, adminEmail);
   await expect(page).toHaveURL(/\/admin$/);
-  await expect(page.getByRole("heading", { name: "Admin management" })).toBeVisible();
-  await expect(page.locator(".mobile-section-nav")).toBeVisible();
-  await expect(page.getByTestId("admin-import-submit")).toBeVisible();
-  await expect(page.getByText("Account management")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "School overview" })).toBeVisible();
+  await page.getByRole("link", { name: "People & classes", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin\/classes$/);
+  await expect(page.getByRole("heading", { name: "People & classes" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Import users" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Class roster" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });

@@ -31,6 +31,7 @@ router = APIRouter(prefix="/api", tags=["writing"])
 SCRIPT_TAG_PATTERN = re.compile(r"<\s*(script|style)[^>]*>.*?<\s*/\s*\1\s*>", re.IGNORECASE | re.DOTALL)
 EVENT_ATTR_PATTERN = re.compile(r"\s+on[a-zA-Z]+\s*=\s*(['\"]).*?\1", re.IGNORECASE | re.DOTALL)
 JAVASCRIPT_URL_PATTERN = re.compile(r"javascript\s*:", re.IGNORECASE)
+WORD_PATTERN = re.compile(r"\S+")
 
 
 class DraftPayload(BaseModel):
@@ -43,6 +44,7 @@ class SubmitPayload(BaseModel):
     content_html: str | None = Field(default=None, max_length=100_000)
     content_text: str | None = Field(default=None, max_length=100_000)
     word_count: int | None = Field(default=None, ge=0, le=10_000)
+    submission_trigger: Literal["MANUAL", "TIMER"] = "MANUAL"
 
 
 class ExamEventPayload(BaseModel):
@@ -54,6 +56,56 @@ def sanitize_html(value: str) -> str:
     without_scripts = SCRIPT_TAG_PATTERN.sub("", value)
     without_event_attrs = EVENT_ATTR_PATTERN.sub("", without_scripts)
     return JAVASCRIPT_URL_PATTERN.sub("", without_event_attrs)
+
+
+def count_words(value: str) -> int:
+    """Match the editor's whitespace-delimited word count on trusted server input."""
+    return len(WORD_PATTERN.findall(value.strip()))
+
+
+def submission_is_late(
+    task: WritingTask,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    checked_at = now or datetime.now(UTC)
+    if checked_at.tzinfo is None:
+        checked_at = checked_at.replace(tzinfo=UTC)
+
+    due_at = task.due_at
+    if due_at is not None and due_at.tzinfo is None:
+        due_at = due_at.replace(tzinfo=UTC)
+    return due_at is not None and checked_at > due_at
+
+
+def ensure_submission_allowed(
+    task: WritingTask,
+    word_count: int,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    """Validate final-submission constraints and return whether it is late."""
+    is_late = submission_is_late(task, now=now)
+    if is_late and not task.allow_late_submission:
+        raise ApiException(
+            ErrorCode.SUBMISSION_DEADLINE_PASSED,
+            "The submission deadline has passed.",
+            409,
+        )
+
+    if task.word_minimum is not None and word_count < task.word_minimum:
+        raise ApiException(
+            ErrorCode.WORD_COUNT_BELOW_MINIMUM,
+            f"Writing must have at least {task.word_minimum} words; the submitted text has {word_count}.",
+            422,
+        )
+    if task.word_maximum is not None and word_count > task.word_maximum:
+        raise ApiException(
+            ErrorCode.WORD_COUNT_ABOVE_MAXIMUM,
+            f"Writing must have no more than {task.word_maximum} words; the submitted text has {word_count}.",
+            422,
+        )
+    return is_late
 
 
 def serialize_draft(row: Draft | None) -> dict | None:
@@ -102,27 +154,44 @@ async def student_task_context(
         )
     )
     profile = profile_result.scalar_one_or_none()
-    if profile is None or profile.current_class_id is None:
+    if profile is None:
         raise ApiException(ErrorCode.NOT_FOUND, "Student class profile not found.", 404)
 
-    task_result = await db.execute(
-        select(WritingTask, Class.name)
-        .join(Assignment, Assignment.task_id == WritingTask.id)
-        .join(Class, Class.id == Assignment.class_id)
+    if profile.current_class_id is not None:
+        task_result = await db.execute(
+            select(WritingTask, Class.name)
+            .join(Assignment, Assignment.task_id == WritingTask.id)
+            .join(Class, Class.id == Assignment.class_id)
+            .options(selectinload(WritingTask.rubric))
+            .where(
+                WritingTask.id == task_id,
+                WritingTask.school_id == user.school_id,
+                WritingTask.status == "PUBLISHED",
+                Assignment.school_id == user.school_id,
+                Assignment.class_id == profile.current_class_id,
+            )
+        )
+        row = task_result.one_or_none()
+        if row is not None:
+            task, class_name = row
+            return profile, task, class_name
+
+    personal_result = await db.execute(
+        select(WritingTask)
         .options(selectinload(WritingTask.rubric))
         .where(
             WritingTask.id == task_id,
             WritingTask.school_id == user.school_id,
+            WritingTask.created_by == user.id,
             WritingTask.status == "PUBLISHED",
-            Assignment.school_id == user.school_id,
-            Assignment.class_id == profile.current_class_id,
+            WritingTask.mode == "PRACTICE",
         )
     )
-    row = task_result.one_or_none()
-    if row is None:
-        raise ApiException(ErrorCode.NOT_FOUND, "Assigned writing task not found.", 404)
-    task, class_name = row
-    return profile, task, class_name
+    personal_task = personal_result.scalar_one_or_none()
+    if personal_task is not None:
+        return profile, personal_task, "My Practice"
+
+    raise ApiException(ErrorCode.NOT_FOUND, "Assigned writing task not found.", 404)
 
 
 async def teacher_submission_context(
@@ -216,6 +285,7 @@ async def save_draft(
 
     now = datetime.now(UTC)
     clean_html = sanitize_html(payload.content_html)
+    word_count = count_words(payload.content_text)
     if draft is None:
         draft = Draft(
             school_id=user.school_id,
@@ -223,7 +293,7 @@ async def save_draft(
             student_id=user.id,
             content_html=clean_html,
             content_text=payload.content_text,
-            word_count=payload.word_count,
+            word_count=word_count,
             version=1,
             status="ACTIVE",
             saved_at=now,
@@ -232,7 +302,7 @@ async def save_draft(
     else:
         draft.content_html = clean_html
         draft.content_text = payload.content_text
-        draft.word_count = payload.word_count
+        draft.word_count = word_count
         draft.version += 1
         draft.saved_at = now
         draft.updated_at = now
@@ -255,10 +325,20 @@ async def submit_writing(
     draft, existing_submission = await current_draft_and_submission(db, user, task_id)
     if existing_submission is not None:
         raise ApiException(ErrorCode.SUBMISSION_LOCKED, "Submission is locked.", 409)
+    if task.mode == "PRACTICE" and payload.submission_trigger != "MANUAL":
+        raise ApiException(
+            ErrorCode.SUBMISSION_TRIGGER_NOT_ALLOWED,
+            "Timer submission is allowed for Exam Mode only.",
+            422,
+        )
 
     content_html = payload.content_html if payload.content_html is not None else draft.content_html if draft else ""
     content_text = payload.content_text if payload.content_text is not None else draft.content_text if draft else ""
-    word_count = payload.word_count if payload.word_count is not None else draft.word_count if draft else 0
+    word_count = count_words(content_text)
+    timer_locked_exam = task.mode == "EXAM" and payload.submission_trigger == "TIMER"
+    submitted_late = (
+        submission_is_late(task) if timer_locked_exam else ensure_submission_allowed(task, word_count)
+    )
     submission = Submission(
         school_id=user.school_id,
         task_id=task_id,
@@ -284,7 +364,11 @@ async def submit_writing(
                 task_id=task_id,
                 student_id=user.id,
                 event_type="SUBMISSION",
-                event_metadata={"source": "manual_or_timer"},
+                event_metadata={
+                    "source": payload.submission_trigger.lower(),
+                    "submitted_late": submitted_late,
+                    "constraints_bypassed": timer_locked_exam,
+                },
             )
         )
     await write_audit_log(
@@ -292,7 +376,14 @@ async def submit_writing(
         request,
         "WRITING_SUBMITTED",
         user,
-        {"task_id": task_id, "mode": task.mode, "word_count": word_count},
+        {
+            "task_id": task_id,
+            "mode": task.mode,
+            "word_count": word_count,
+            "submitted_late": submitted_late,
+            "submission_trigger": payload.submission_trigger,
+            "constraints_bypassed": timer_locked_exam,
+        },
     )
     await db.commit()
     await db.refresh(submission)

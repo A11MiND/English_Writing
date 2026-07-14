@@ -78,6 +78,7 @@ describe("applySuggestionToText", () => {
           length: 3,
           replacements: ["the"],
           severity: "WARNING",
+          level: "WORD",
         },
         "the",
       ),

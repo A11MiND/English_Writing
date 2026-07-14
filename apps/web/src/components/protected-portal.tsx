@@ -26,7 +26,7 @@ export function ProtectedPortal({ allowedRoles, title, subtitle, actions }: Prot
       const user = await currentUser();
       if (!active) return;
       if (!user) {
-        window.location.href = "/";
+        window.location.href = "/login";
         return;
       }
       if (!allowedRoles.includes(user.role)) {
@@ -46,7 +46,7 @@ export function ProtectedPortal({ allowedRoles, title, subtitle, actions }: Prot
 
   async function onLogout() {
     await logout();
-    window.location.href = "/";
+    window.location.href = "/login";
   }
 
   if (state.status === "loading") {
@@ -66,7 +66,7 @@ export function ProtectedPortal({ allowedRoles, title, subtitle, actions }: Prot
           type="button"
           onClick={() => {
             void currentUser().then((user) => {
-              window.location.href = user ? routeForRole(user.role) : "/";
+              window.location.href = user ? routeForRole(user.role) : "/login";
             });
           }}
           className="mt-8 btn btn-primary btn-lg"
@@ -82,7 +82,7 @@ export function ProtectedPortal({ allowedRoles, title, subtitle, actions }: Prot
       <header className="app-header">
         <div>
           <p className="eyebrow">
-            W F Joseph Lee Primary School
+            English AI Writing Studio
           </p>
           <h1 className="page-title">{title}</h1>
         </div>
@@ -104,7 +104,7 @@ export function ProtectedPortal({ allowedRoles, title, subtitle, actions }: Prot
       <section className="grid flex-1 items-center gap-8 py-12 md:grid-cols-[0.9fr_1.1fr]">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.12em] text-coral">
-            Phase 1 secured workspace
+            Secure workspace
           </p>
           <h2 className="mt-4 text-5xl font-semibold leading-tight text-ink">{title}</h2>
           <p className="mt-5 text-lg leading-8 text-ink/70">{subtitle}</p>
@@ -117,7 +117,7 @@ export function ProtectedPortal({ allowedRoles, title, subtitle, actions }: Prot
             >
               {action}
               <p className="mt-3 text-sm font-normal leading-6 text-ink/55">
-                Available in the next implementation phase.
+                Access is controlled by your school account role.
               </p>
             </div>
           ))}

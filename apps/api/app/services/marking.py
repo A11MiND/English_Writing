@@ -8,15 +8,84 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models import AIUsageLog, MarkingResult, PostWritingExercise, Rubric, Submission, WritingTask
+from app.services.ai_settings import get_school_llm_adapter
 from app.services.llm import (
     LLMAdapter,
     LLMError,
     LLMGenerationRequest,
     build_ai_marking_messages,
-    get_llm_adapter,
 )
 
 MAX_MARKING_ATTEMPTS = 3
+
+RUBRIC_SCORE_FIELDS = {
+    "content_score": "Content",
+    "language_score": "Language",
+    "organisation_score": "Organisation",
+}
+
+
+def rubric_score_limits(dimensions: list[Any]) -> dict[str, dict[str, int | str]]:
+    """Return the score bounds used by the persisted three-dimension result model."""
+    dimensions_by_name = {
+        str(dimension.name).strip().casefold(): dimension for dimension in dimensions
+    }
+    limits: dict[str, dict[str, int | str]] = {}
+    for score_field, dimension_name in RUBRIC_SCORE_FIELDS.items():
+        dimension = dimensions_by_name.get(dimension_name.casefold())
+        if dimension is None:
+            raise ValueError(f"Rubric is missing the required {dimension_name} dimension.")
+        limits[score_field] = {
+            "name": dimension_name,
+            "min_score": int(dimension.min_score),
+            "max_score": int(dimension.max_score),
+        }
+    return limits
+
+
+def rubric_total_score(limits: dict[str, dict[str, int | str]]) -> int:
+    return sum(int(limit["max_score"]) for limit in limits.values())
+
+
+def normalize_ai_marking_payload(
+    payload: dict[str, Any], dimensions: list[Any]
+) -> dict[str, Any]:
+    """Clamp provider scores to the task rubric and make the total authoritative."""
+    normalized = dict(payload)
+    limits = rubric_score_limits(dimensions)
+    changes: dict[str, dict[str, int]] = {}
+    for score_field, limit in limits.items():
+        original = int(normalized[score_field])
+        bounded = max(
+            int(limit["min_score"]),
+            min(int(limit["max_score"]), original),
+        )
+        normalized[score_field] = bounded
+        if bounded != original:
+            changes[score_field] = {"provider": original, "normalized": bounded}
+
+    provider_total = int(normalized["total_score"])
+    calculated_total = sum(int(normalized[field]) for field in RUBRIC_SCORE_FIELDS)
+    normalized["total_score"] = calculated_total
+    if provider_total != calculated_total:
+        changes["total_score"] = {
+            "provider": provider_total,
+            "normalized": calculated_total,
+        }
+
+    metadata = dict(normalized.get("model_metadata") or {})
+    metadata["rubric_score_scale"] = {
+        field: {
+            "min_score": int(limit["min_score"]),
+            "max_score": int(limit["max_score"]),
+        }
+        for field, limit in limits.items()
+    }
+    metadata["rubric_total_score"] = rubric_total_score(limits)
+    if changes:
+        metadata["score_normalization"] = changes
+    normalized["model_metadata"] = metadata
+    return normalized
 
 
 def serialize_marking_result(row: MarkingResult | None) -> dict | None:
@@ -145,7 +214,7 @@ async def process_marking_result(
         f"{dimension.name}: {dimension.min_score}-{dimension.max_score}. {dimension.descriptor}"
         for dimension in dimensions
     )
-    adapter = adapter or get_llm_adapter()
+    adapter = adapter or await get_school_llm_adapter(db, row.school_id)
     messages = build_ai_marking_messages(
         task_title=task.title,
         task_instruction=task.instruction,
@@ -159,7 +228,8 @@ async def process_marking_result(
         row.status = "PROCESSING"
         try:
             response = await adapter.generate_json(LLMGenerationRequest(messages=messages))
-            apply_ai_payload(row, response.json_data)
+            normalized_payload = normalize_ai_marking_payload(response.json_data, dimensions)
+            apply_ai_payload(row, normalized_payload)
             await create_exercises_for_marking_result(db, row)
             db.add(
                 AIUsageLog(

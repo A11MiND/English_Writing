@@ -18,12 +18,14 @@ class Settings(BaseSettings):
     marking_worker_poll_timeout_seconds: int = 5
     openauth_token_url: str | None = None
     openauth_userinfo_url: str | None = None
+    openauth_register_url: str | None = None
     openauth_client_id: str | None = None
     openauth_client_secret: str | None = None
     openauth_scope: str = "openid profile email"
     openauth_user_id_claim: str = "sub"
     openauth_school_id_claim: str = "school_id"
     openauth_role_claim: str = "role"
+    school_join_code: str = "WFJLP-DEMO"
     grammar_provider: str = "languagetool"
     grammar_service_url: str | None = "http://grammar-service:8010"
     grammar_cache_ttl_seconds: int = 86_400
@@ -37,10 +39,21 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_base_url: str | None = None
     llm_timeout_seconds: float = 30.0
+    minimax_api_keys: str = ""
+    minimax_base_url: str = "https://api.minimaxi.com/v1"
+    minimax_speech_model: str = "speech-2.8-hd"
+    minimax_speech_voice: str = "English_expressive_narrator"
+    minimax_image_model: str = "image-01"
+    minimax_timeout_seconds: float = 60.0
+    media_storage_dir: str = "/app/data/media"
 
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.api_cors_origins.split(",") if origin.strip()]
+
+    @property
+    def minimax_key_pool(self) -> list[str]:
+        return [key.strip() for key in self.minimax_api_keys.split(",") if key.strip()]
 
 
 @lru_cache

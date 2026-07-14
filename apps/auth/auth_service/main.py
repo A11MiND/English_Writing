@@ -6,12 +6,16 @@ import hmac
 import json
 import time
 from dataclasses import dataclass
+from pathlib import Path
+from threading import Lock
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Form, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from auth_service.hash_password import hash_password
 
 
 class Settings(BaseSettings):
@@ -24,6 +28,7 @@ class Settings(BaseSettings):
     openauth_signing_secret: str = "change-me-in-local-env"
     openauth_users_json: str = "[]"
     openauth_users_json_file: str | None = None
+    openauth_registered_users_json_file: str | None = None
 
 
 class AuthUser(BaseModel):
@@ -49,6 +54,14 @@ class IdentityStore:
                 raw_users = json.loads(settings.openauth_users_json)
         except json.JSONDecodeError as exc:
             raise RuntimeError("OPENAUTH_USERS_JSON is not valid JSON.") from exc
+        if settings.openauth_registered_users_json_file:
+            registered_path = Path(settings.openauth_registered_users_json_file)
+            if registered_path.exists():
+                try:
+                    registered_users = json.loads(registered_path.read_text(encoding="utf-8"))
+                except json.JSONDecodeError as exc:
+                    raise RuntimeError("Registered identity file is not valid JSON.") from exc
+                raw_users.extend(registered_users)
         users = [AuthUser.model_validate(item) for item in raw_users]
         return cls({user.email.lower().strip(): user for user in users})
 
@@ -84,6 +97,54 @@ def verify_password(password: str, encoded_hash: str) -> bool:
         int(iterations),
     ).hex()
     return hmac.compare_digest(derived, expected_hex)
+
+
+class RegisterIdentityRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=8, max_length=128)
+    user_id: str = Field(min_length=36, max_length=36)
+    school_id: str = Field(min_length=36, max_length=36)
+    role: str = Field(pattern="^STUDENT$")
+
+
+identity_file_lock = Lock()
+
+
+def persist_registered_identity(
+    payload: RegisterIdentityRequest,
+    settings: Settings,
+    store: IdentityStore,
+) -> AuthUser:
+    email = payload.email.lower().strip()
+    if email in store.users_by_email:
+        raise HTTPException(status_code=409, detail="Email is already registered.")
+    if not settings.openauth_registered_users_json_file:
+        raise HTTPException(status_code=503, detail="Registered identity storage is not configured.")
+
+    path = Path(settings.openauth_registered_users_json_file)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with identity_file_lock:
+        try:
+            raw_users = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=500, detail="Registered identity storage is invalid.") from exc
+        if any(str(item.get("email", "")).lower().strip() == email for item in raw_users):
+            raise HTTPException(status_code=409, detail="Email is already registered.")
+        user = AuthUser.model_validate(
+            {
+                "email": email,
+                "password_hash": hash_password(payload.password),
+                "sub": payload.user_id,
+                "school_id": payload.school_id,
+                "role": payload.role,
+                "status": "ACTIVE",
+            }
+        )
+        raw_users.append(user.model_dump(by_alias=True))
+        temporary_path = path.with_suffix(f"{path.suffix}.tmp")
+        temporary_path.write_text(json.dumps(raw_users, indent=2), encoding="utf-8")
+        temporary_path.replace(path)
+        return user
 
 
 def sign_payload(payload: dict, settings: Settings) -> str:
@@ -128,6 +189,21 @@ app = FastAPI(title="English AI Writing OpenAuth Service", version="0.0.0")
 @app.get("/health")
 async def health() -> dict:
     return {"service": "auth", "status": "ok"}
+
+
+@app.post("/internal/users", status_code=201)
+async def register_identity(
+    payload: RegisterIdentityRequest,
+    settings: Annotated[Settings, Depends(get_settings)],
+    store: Annotated[IdentityStore, Depends(get_identity_store)],
+    x_openauth_client_secret: Annotated[str | None, Header()] = None,
+) -> dict:
+    if not x_openauth_client_secret or not hmac.compare_digest(
+        x_openauth_client_secret, settings.openauth_client_secret
+    ):
+        raise HTTPException(status_code=401, detail="Invalid identity provisioning client.")
+    user = persist_registered_identity(payload, settings, store)
+    return {"sub": user.user_id, "email": user.email, "role": user.role}
 
 
 @app.post("/oauth/token")

@@ -43,11 +43,13 @@ services:
       OPENAUTH_CLIENT_SECRET: ${OPENAUTH_CLIENT_SECRET:-local-dev-client-secret}
       OPENAUTH_SIGNING_SECRET: ${OPENAUTH_SIGNING_SECRET:-local-dev-signing-secret}
       OPENAUTH_USERS_JSON_FILE: ${OPENAUTH_USERS_JSON_FILE:-}
+      OPENAUTH_REGISTERED_USERS_JSON_FILE: /data/registered-users.json
     ports:
       - "9000:9000"
     volumes:
       - ./apps/auth:/app/apps/auth
       - ./tests/fixtures/uat:/app/tests/fixtures/uat:ro
+      - auth-data:/data
     working_dir: /app
     command: ["uvicorn", "auth_service.main:app", "--app-dir", "/app/apps/auth", "--host", "0.0.0.0", "--port", "9000", "--reload"]
 
@@ -62,8 +64,16 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       OPENAUTH_TOKEN_URL: ${OPENAUTH_TOKEN_URL:-http://auth:9000/oauth/token}
       OPENAUTH_USERINFO_URL: ${OPENAUTH_USERINFO_URL:-http://auth:9000/userinfo}
+      OPENAUTH_REGISTER_URL: ${OPENAUTH_REGISTER_URL:-http://auth:9000/internal/users}
       OPENAUTH_CLIENT_ID: ${OPENAUTH_CLIENT_ID:-english-ai-writing-web}
       OPENAUTH_CLIENT_SECRET: ${OPENAUTH_CLIENT_SECRET:-local-dev-client-secret}
+      SCHOOL_JOIN_CODE: ${SCHOOL_JOIN_CODE:-WFJLP-DEMO}
+      MINIMAX_API_KEYS: ${MINIMAX_API_KEYS:-}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-https://api.minimaxi.com/v1}
+      MINIMAX_SPEECH_MODEL: ${MINIMAX_SPEECH_MODEL:-speech-2.8-hd}
+      MINIMAX_SPEECH_VOICE: ${MINIMAX_SPEECH_VOICE:-English_expressive_narrator}
+      MINIMAX_IMAGE_MODEL: ${MINIMAX_IMAGE_MODEL:-image-01}
+      MEDIA_STORAGE_DIR: /app/data/media
       GRAMMAR_PROVIDER: ${GRAMMAR_PROVIDER:-languagetool}
       GRAMMAR_SERVICE_URL: ${GRAMMAR_SERVICE_URL:-http://grammar-service:8010}
       API_CORS_ORIGINS: ${API_CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000},http://web-e2e:3000
@@ -84,6 +94,7 @@ services:
       - ./infra/migrations:/app/infra/migrations
       - ./alembic.ini:/app/alembic.ini
       - ./pytest.ini:/app/pytest.ini
+      - media-data:/app/data/media
     working_dir: /app
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
@@ -128,7 +139,9 @@ services:
     env_file:
       - .env
     environment:
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+      API_PROXY_TARGET: http://api:8000
+      NEXT_PUBLIC_API_BASE_URL: same-origin
+      NEXT_TELEMETRY_DISABLED: "1"
     ports:
       - "3000:3000"
     depends_on:
@@ -143,7 +156,12 @@ services:
       - web-root-node-modules:/app/node_modules
       - web-app-node-modules:/app/apps/web/node_modules
       - shared-node-modules:/app/packages/shared/node_modules
-    command: ["pnpm", "--filter", "@english-ai-writing/web", "dev", "--hostname", "0.0.0.0"]
+    command:
+      [
+        "sh",
+        "-lc",
+        "pnpm --dir apps/web build && pnpm --dir apps/web exec next start -H 0.0.0.0 -p 3000",
+      ]
 
   web-e2e:
     profiles: ["e2e"]
@@ -155,6 +173,7 @@ services:
     environment:
       API_PROXY_TARGET: http://api:8000
       NEXT_PUBLIC_API_BASE_URL: same-origin
+      NEXT_TELEMETRY_DISABLED: "1"
     depends_on:
       - api
     volumes:
@@ -167,7 +186,12 @@ services:
       - web-e2e-root-node-modules:/app/node_modules
       - web-e2e-app-node-modules:/app/apps/web/node_modules
       - web-e2e-shared-node-modules:/app/packages/shared/node_modules
-    command: ["pnpm", "--filter", "@english-ai-writing/web", "dev", "--hostname", "0.0.0.0"]
+    command:
+      [
+        "sh",
+        "-lc",
+        "pnpm --dir apps/web build && pnpm --dir apps/web exec next start -H 0.0.0.0 -p 3000",
+      ]
 
   e2e:
     profiles: ["e2e"]
@@ -194,6 +218,8 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  auth-data:
+  media-data:
   web-next-cache:
   web-root-node-modules:
   web-app-node-modules:

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.auth import Role, require_roles, write_audit_log
 from app.core.database import get_session
@@ -17,6 +18,7 @@ from app.models import (
     ClassMembership,
     MarkingResult,
     PostWritingExercise,
+    Rubric,
     StudentProfile,
     Submission,
     TeacherReview,
@@ -26,6 +28,8 @@ from app.models import (
 from app.services.marking import (
     create_exercises_for_marking_result,
     process_marking_result,
+    rubric_score_limits,
+    rubric_total_score,
     serialize_marking_result,
 )
 
@@ -33,10 +37,10 @@ router = APIRouter(prefix="/api", tags=["marking"])
 
 
 class TeacherReviewPayload(BaseModel):
-    content_score: int | None = Field(default=None, ge=0, le=5)
-    language_score: int | None = Field(default=None, ge=0, le=5)
-    organisation_score: int | None = Field(default=None, ge=0, le=5)
-    total_score: int | None = Field(default=None, ge=0, le=15)
+    content_score: int | None = Field(default=None, ge=0)
+    language_score: int | None = Field(default=None, ge=0)
+    organisation_score: int | None = Field(default=None, ge=0)
+    total_score: int | None = Field(default=None, ge=0)
     review_notes: str | None = Field(default=None, max_length=5000)
     status: str = Field(default="REVIEWED", pattern="^(DRAFT|REVIEWED|RELEASE_READY)$")
 
@@ -52,9 +56,46 @@ class TeacherReviewPayload(BaseModel):
         return self
 
 
+def validate_teacher_review_scores(payload: TeacherReviewPayload, rubric: Rubric) -> None:
+    limits = rubric_score_limits(rubric.dimensions)
+    scores = {
+        "content_score": payload.content_score,
+        "language_score": payload.language_score,
+        "organisation_score": payload.organisation_score,
+    }
+    provided_scores = [score for score in scores.values() if score is not None]
+    if provided_scores and len(provided_scores) != len(scores):
+        raise ApiException(
+            ErrorCode.VALIDATION_ERROR,
+            "Content, Language and Organisation scores must be provided together.",
+            422,
+        )
+    for score_field, score in scores.items():
+        if score is None:
+            continue
+        limit = limits[score_field]
+        minimum = int(limit["min_score"])
+        maximum = int(limit["max_score"])
+        if score < minimum or score > maximum:
+            raise ApiException(
+                ErrorCode.VALIDATION_ERROR,
+                f"{limit['name']} score must be between {minimum} and {maximum}.",
+                422,
+            )
+    if payload.total_score is not None:
+        maximum_total = rubric_total_score(limits)
+        if payload.total_score > maximum_total:
+            raise ApiException(
+                ErrorCode.VALIDATION_ERROR,
+                f"Total score must be between 0 and {maximum_total}.",
+                422,
+            )
+
+
 def serialize_submission_for_marking(
     submission: Submission,
     task: WritingTask,
+    rubric: Rubric,
     class_name: str,
     marking_result: MarkingResult | None,
 ) -> dict:
@@ -73,6 +114,24 @@ def serialize_submission_for_marking(
             "title": task.title,
             "mode": task.mode,
             "level": task.level,
+            "rubric": {
+                "id": rubric.id,
+                "title": rubric.title,
+                "total_score": rubric_total_score(rubric_score_limits(rubric.dimensions)),
+                "dimensions": [
+                    {
+                        "id": dimension.id,
+                        "name": dimension.name,
+                        "min_score": dimension.min_score,
+                        "max_score": dimension.max_score,
+                        "descriptor": dimension.descriptor,
+                        "sort_order": dimension.sort_order,
+                    }
+                    for dimension in sorted(
+                        rubric.dimensions, key=lambda item: item.sort_order
+                    )
+                ],
+            },
         },
         "class_name": class_name,
         "marking_result": serialize_marking_result(marking_result),
@@ -81,11 +140,12 @@ def serialize_submission_for_marking(
 
 async def teacher_marking_context(
     db: AsyncSession, teacher: User, marking_result_id: str
-) -> tuple[MarkingResult, Submission, WritingTask, str]:
+) -> tuple[MarkingResult, Submission, WritingTask, Rubric, str]:
     result = await db.execute(
-        select(MarkingResult, Submission, WritingTask, Class.name)
+        select(MarkingResult, Submission, WritingTask, Rubric, Class.name)
         .join(Submission, Submission.id == MarkingResult.submission_id)
         .join(WritingTask, WritingTask.id == Submission.task_id)
+        .join(Rubric, Rubric.id == WritingTask.rubric_id)
         .join(Assignment, Assignment.task_id == WritingTask.id)
         .join(
             StudentProfile,
@@ -94,12 +154,14 @@ async def teacher_marking_context(
         )
         .join(Class, Class.id == Assignment.class_id)
         .join(ClassMembership, ClassMembership.class_id == Class.id)
+        .options(selectinload(Rubric.dimensions))
         .where(
             MarkingResult.id == marking_result_id,
             MarkingResult.school_id == teacher.school_id,
             StudentProfile.school_id == teacher.school_id,
             Submission.school_id == teacher.school_id,
             WritingTask.school_id == teacher.school_id,
+            Rubric.school_id == teacher.school_id,
             Assignment.school_id == teacher.school_id,
             ClassMembership.school_id == teacher.school_id,
             ClassMembership.user_id == teacher.id,
@@ -122,8 +184,9 @@ async def list_teacher_marking_submissions(
     status: Annotated[str | None, Query()] = None,
 ) -> dict:
     statement = (
-        select(Submission, WritingTask, Class.name, MarkingResult)
+        select(Submission, WritingTask, Rubric, Class.name, MarkingResult)
         .join(WritingTask, WritingTask.id == Submission.task_id)
+        .join(Rubric, Rubric.id == WritingTask.rubric_id)
         .join(Assignment, Assignment.task_id == WritingTask.id)
         .join(
             StudentProfile,
@@ -133,10 +196,12 @@ async def list_teacher_marking_submissions(
         .join(Class, Class.id == Assignment.class_id)
         .join(ClassMembership, ClassMembership.class_id == Class.id)
         .outerjoin(MarkingResult, MarkingResult.submission_id == Submission.id)
+        .options(selectinload(Rubric.dimensions))
         .where(
             Submission.school_id == user.school_id,
             StudentProfile.school_id == user.school_id,
             WritingTask.school_id == user.school_id,
+            Rubric.school_id == user.school_id,
             Assignment.school_id == user.school_id,
             ClassMembership.school_id == user.school_id,
             ClassMembership.user_id == user.id,
@@ -152,8 +217,8 @@ async def list_teacher_marking_submissions(
         statement = statement.where(MarkingResult.status == status)
     result = await db.execute(statement)
     rows = [
-        serialize_submission_for_marking(submission, task, class_name, marking_result)
-        for submission, task, class_name, marking_result in result.all()
+        serialize_submission_for_marking(submission, task, rubric, class_name, marking_result)
+        for submission, task, rubric, class_name, marking_result in result.all()
     ]
     return success_response(request, {"items": rows})
 
@@ -273,7 +338,7 @@ async def run_teacher_marking_result(
     user: Annotated[User, Depends(require_roles(Role.TEACHER))],
     db: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict:
-    marking_result, _, _, _ = await teacher_marking_context(db, user, marking_result_id)
+    marking_result, _, _, _, _ = await teacher_marking_context(db, user, marking_result_id)
     if marking_result.status == "AI_MARKED":
         return success_response(request, {"marking_result": serialize_marking_result(marking_result)})
     await process_marking_result(db, marking_result)
@@ -296,7 +361,7 @@ async def retry_teacher_marking_result(
     user: Annotated[User, Depends(require_roles(Role.TEACHER))],
     db: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict:
-    marking_result, _, _, _ = await teacher_marking_context(db, user, marking_result_id)
+    marking_result, _, _, _, _ = await teacher_marking_context(db, user, marking_result_id)
     if marking_result.status != "AI_MARKING_FAILED":
         raise ApiException(ErrorCode.VALIDATION_ERROR, "Only failed AI marking can be retried.", 422)
     marking_result.status = "QUEUED"
@@ -323,7 +388,10 @@ async def review_teacher_marking_result(
     user: Annotated[User, Depends(require_roles(Role.TEACHER))],
     db: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict:
-    marking_result, submission, _, _ = await teacher_marking_context(db, user, marking_result_id)
+    marking_result, submission, _, rubric, _ = await teacher_marking_context(
+        db, user, marking_result_id
+    )
+    validate_teacher_review_scores(payload, rubric)
     existing_result = await db.execute(
         select(TeacherReview).where(
             TeacherReview.school_id == user.school_id,
@@ -403,6 +471,28 @@ def serialize_exercise(row: PostWritingExercise) -> dict:
     }
 
 
+def serialize_released_student_marking(row: MarkingResult) -> dict:
+    return {
+        "id": row.id,
+        "submission_id": row.submission_id,
+        "task_id": row.task_id,
+        "student_id": row.student_id,
+        "status": row.status,
+        "content_score": row.content_score,
+        "language_score": row.language_score,
+        "organisation_score": row.organisation_score,
+        "total_score": row.total_score,
+        "content_feedback": row.content_feedback,
+        "language_feedback": row.language_feedback,
+        "organisation_feedback": row.organisation_feedback,
+        "strengths": row.strengths,
+        "weaknesses": row.weaknesses,
+        "sentence_level_comments": row.sentence_level_comments,
+        "recommended_exercises": row.recommended_exercises,
+        "marked_at": row.marked_at.isoformat() if row.marked_at else None,
+    }
+
+
 @router.post("/teacher/marking-results/{marking_result_id}/release")
 async def release_teacher_feedback(
     marking_result_id: str,
@@ -410,7 +500,9 @@ async def release_teacher_feedback(
     user: Annotated[User, Depends(require_roles(Role.TEACHER))],
     db: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict:
-    marking_result, submission, _, _ = await teacher_marking_context(db, user, marking_result_id)
+    marking_result, submission, _, _, _ = await teacher_marking_context(
+        db, user, marking_result_id
+    )
     if marking_result.status != "AI_MARKED":
         raise ApiException(ErrorCode.VALIDATION_ERROR, "Only marked submissions can be released.", 422)
 
@@ -498,7 +590,7 @@ async def get_student_feedback(
                 "word_count": submission.word_count,
                 "submitted_at": submission.submitted_at.isoformat(),
             },
-            "marking_result": serialize_marking_result(marking_result),
+            "marking_result": serialize_released_student_marking(marking_result),
             "review": serialize_teacher_review(review),
             "exercises": [serialize_exercise(exercise) for exercise in exercise_result.scalars().all()],
         },

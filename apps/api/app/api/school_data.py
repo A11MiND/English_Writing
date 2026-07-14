@@ -1,5 +1,6 @@
 from typing import Annotated, Literal
 from uuid import UUID
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field, field_validator
@@ -11,6 +12,7 @@ from app.core.auth import AccountStatus, Role, require_roles, write_audit_log
 from app.core.database import get_session
 from app.core.responses import ApiException, ErrorCode, success_response
 from app.models import Class, ClassMembership, StudentProfile, TeacherProfile, User
+from app.services.identity_provisioning import provision_identity
 
 router = APIRouter(prefix="/api", tags=["school-data"])
 
@@ -77,6 +79,30 @@ class ImportUserRow(BaseModel):
 class ImportUsersRequest(BaseModel):
     role: Literal["TEACHER", "STUDENT"]
     rows: list[ImportUserRow] = Field(min_length=1, max_length=500)
+
+
+class CreateTeacherStudentRequest(BaseModel):
+    display_name: str = Field(min_length=2, max_length=80)
+    email: str = Field(min_length=3, max_length=255)
+    temporary_password: str = Field(min_length=8, max_length=128)
+    class_id: str = Field(min_length=36, max_length=36)
+    student_number: str | None = Field(default=None, min_length=2, max_length=64)
+
+    @field_validator("display_name", "student_number")
+    @classmethod
+    def clean_teacher_student_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+    @field_validator("email")
+    @classmethod
+    def clean_teacher_student_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if "@" not in normalized or normalized.startswith("@") or normalized.endswith("@"):
+            raise ValueError("Valid email is required.")
+        return normalized
 
 
 async def school_scope(db: AsyncSession, user: User) -> str:
@@ -360,6 +386,146 @@ async def list_teacher_classes(
     )
     classes = [serialize_class(row) for row in result.scalars().all()]
     return success_response(request, {"classes": classes})
+
+
+@router.get("/teacher/students")
+async def list_teacher_students(
+    request: Request,
+    user: Annotated[User, Depends(require_roles(Role.TEACHER))],
+    db: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    teacher_classes = (
+        select(ClassMembership.class_id)
+        .where(
+            ClassMembership.school_id == user.school_id,
+            ClassMembership.user_id == user.id,
+            ClassMembership.membership_role == Role.TEACHER,
+        )
+    )
+    result = await db.execute(
+        select(User, StudentProfile, Class)
+        .join(StudentProfile, StudentProfile.user_id == User.id)
+        .join(Class, Class.id == StudentProfile.current_class_id)
+        .where(
+            User.school_id == user.school_id,
+            User.role == Role.STUDENT,
+            StudentProfile.current_class_id.in_(teacher_classes),
+        )
+        .order_by(Class.name, User.display_name)
+    )
+    students = [
+        {
+            "id": student.id,
+            "display_name": student.display_name,
+            "email": student.email,
+            "status": student.status,
+            "student_number": profile.student_number,
+            "level": profile.level,
+            "class_id": class_row.id,
+            "class_name": class_row.name,
+        }
+        for student, profile, class_row in result
+    ]
+    return success_response(request, {"students": students})
+
+
+@router.post("/teacher/students")
+async def create_teacher_student(
+    payload: CreateTeacherStudentRequest,
+    request: Request,
+    user: Annotated[User, Depends(require_roles(Role.TEACHER))],
+    db: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    class_result = await db.execute(
+        select(Class)
+        .join(ClassMembership, ClassMembership.class_id == Class.id)
+        .where(
+            Class.id == payload.class_id,
+            Class.school_id == user.school_id,
+            ClassMembership.school_id == user.school_id,
+            ClassMembership.user_id == user.id,
+            ClassMembership.membership_role == Role.TEACHER,
+        )
+    )
+    class_row = class_result.scalar_one_or_none()
+    if class_row is None:
+        raise ApiException(ErrorCode.ACCESS_DENIED, "Teacher is not assigned to this class.", 403)
+    existing_email = await db.execute(select(User.id).where(User.email == payload.email))
+    if existing_email.scalar_one_or_none() is not None:
+        raise ApiException(ErrorCode.DUPLICATE_RECORD, "Email is already registered.", 409)
+    if payload.student_number:
+        existing_number = await db.execute(
+            select(StudentProfile.id).where(
+                StudentProfile.school_id == user.school_id,
+                StudentProfile.student_number == payload.student_number,
+            )
+        )
+        if existing_number.scalar_one_or_none() is not None:
+            raise ApiException(ErrorCode.DUPLICATE_RECORD, "Student number is already registered.", 409)
+
+    user_id = str(uuid4())
+    student_number = payload.student_number or f"P{user_id[:6].upper()}"
+    await provision_identity(
+        email=payload.email,
+        password=payload.temporary_password,
+        user_id=user_id,
+        school_id=user.school_id,
+        role=Role.STUDENT,
+    )
+    student = User(
+        id=user_id,
+        school_id=user.school_id,
+        email=payload.email,
+        display_name=payload.display_name,
+        role=Role.STUDENT,
+        status=AccountStatus.ACTIVE,
+    )
+    db.add(student)
+    await db.flush()
+    db.add(
+        StudentProfile(
+            school_id=user.school_id,
+            user_id=student.id,
+            student_number=student_number,
+            level=class_row.level,
+            current_class_id=class_row.id,
+        )
+    )
+    db.add(
+        ClassMembership(
+            school_id=user.school_id,
+            class_id=class_row.id,
+            user_id=student.id,
+            membership_role=Role.STUDENT,
+        )
+    )
+    await write_audit_log(
+        db,
+        request,
+        "STUDENT_CREATED_BY_TEACHER",
+        user,
+        {"student_id": student.id, "class_id": class_row.id},
+    )
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise ApiException(ErrorCode.DUPLICATE_RECORD, "Student account already exists.", 409) from exc
+    return success_response(
+        request,
+        {
+            "student": {
+                "id": student.id,
+                "display_name": student.display_name,
+                "email": student.email,
+                "status": student.status,
+                "student_number": student_number,
+                "level": class_row.level,
+                "class_id": class_row.id,
+                "class_name": class_row.name,
+            }
+        },
+    )
 
 
 @router.get("/student/profile")

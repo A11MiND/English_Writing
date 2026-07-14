@@ -5,10 +5,20 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.api.reports import sanitize_csv_cell
+from app.api.reports import (
+    build_class_report_pdf,
+    sanitize_csv_cell,
+    score_bucket,
+    score_distribution_labels,
+)
 
 
 client = TestClient(app)
+
+REPORT_SUBMISSION_TEXT = (
+    "I helped a classmate finish a difficult exercise, then explained each step carefully "
+    "so we could submit our work before lunch."
+)
 
 
 def teacher_session() -> TestClient:
@@ -95,6 +105,117 @@ def test_csv_export_sanitizes_formula_cells() -> None:
     assert sanitize_csv_cell(12) == 12
 
 
+def test_pdf_export_builds_visual_summary_and_paginated_student_table() -> None:
+    rows = [
+        {
+            "student_name": f"Student {index}",
+            "student_number": f"P5A{index:02d}",
+            "task_title": "A Memorable School Day",
+            "word_count": 142,
+            "total_score": 12,
+            "total_max_score": 15,
+            "submitted": True,
+            "review_status": "RELEASED",
+        }
+        for index in range(24)
+    ]
+    payload = {
+        "class_report": {
+            "school_name": "W F Joseph Lee Primary School",
+            "class_name": "P5A",
+            "level": "P5",
+            "task_id": "task-1",
+        },
+        "summary": {
+            "completion_rate": 0.8,
+            "submitted_count": 24,
+            "expected_submissions": 30,
+            "average_total_score": 11.8,
+            "average_total_percentage": 78.67,
+            "maximum_total_score": 15,
+            "student_count": 30,
+        },
+        "rubric_breakdown": {
+            "content_average": 4.0,
+            "content_average_percentage": 80.0,
+            "content_max_score": 5,
+            "language_average": 3.4,
+            "language_average_percentage": 68.0,
+            "language_max_score": 5,
+            "organisation_average": 4.2,
+            "organisation_average_percentage": 84.0,
+            "organisation_max_score": 5,
+        },
+        "common_weaknesses": [
+            {"weakness": "Past tense", "count": 8},
+            {"weakness": "Word choice", "count": 5},
+        ],
+        "completion_rows": rows,
+    }
+
+    pdf = build_class_report_pdf(payload, "2026-07-10T10:30:00+08:00")
+
+    assert pdf.startswith(b"%PDF-1.4")
+    assert b"Class writing report" in pdf
+    assert b"Student writing overview" in pdf
+    assert b"/Count 3" in pdf
+
+
+def test_non_fifteen_score_distribution_and_pdf_labels_use_rubric_maximum() -> None:
+    assert score_distribution_labels(20) == ["0-6", "7-13", "14-20", "21+", "unscored"]
+    assert score_bucket(6, 20, 20) == "0-6"
+    assert score_bucket(13, 20, 20) == "7-13"
+    assert score_bucket(20, 20, 20) == "14-20"
+    assert score_bucket(21, 20, 20) == "21+"
+
+    payload = {
+        "class_report": {
+            "school_name": "Example Primary School",
+            "class_name": "P5A",
+            "level": "P5",
+            "task_id": "task-20",
+        },
+        "summary": {
+            "completion_rate": 1,
+            "submitted_count": 1,
+            "expected_submissions": 1,
+            "average_total_score": 17,
+            "average_total_percentage": 85,
+            "maximum_total_score": 20,
+            "student_count": 1,
+        },
+        "rubric_breakdown": {
+            "content_average": 7,
+            "content_average_percentage": 87.5,
+            "content_max_score": 8,
+            "language_average": 5,
+            "language_average_percentage": 83.33,
+            "language_max_score": 6,
+            "organisation_average": 5,
+            "organisation_average_percentage": 83.33,
+            "organisation_max_score": 6,
+        },
+        "common_weaknesses": [],
+        "completion_rows": [
+            {
+                "student_name": "Student 1",
+                "student_number": "P5A01",
+                "task_title": "A Longer Scale",
+                "word_count": 150,
+                "total_score": 17,
+                "total_max_score": 20,
+                "submitted": True,
+                "review_status": "RELEASED",
+            }
+        ],
+    }
+
+    pdf = build_class_report_pdf(payload, "2026-07-14T10:30:00+08:00")
+
+    assert b"17 / 20" in pdf
+    assert b"7 / 8" in pdf
+
+
 @pytest.mark.skipif(
     os.getenv("RUN_DB_TESTS") != "1",
     reason="Set RUN_DB_TESTS=1 when Postgres is running for report/export tests.",
@@ -108,9 +229,9 @@ def test_teacher_generates_report_and_exports_csv_pdf() -> None:
     submit_response = student.post(
         f"/api/student/tasks/{task_id}/submit",
         json={
-            "content_html": "<p>I helped a classmate finish a difficult exercise.</p>",
-            "content_text": "I helped a classmate finish a difficult exercise.",
-            "word_count": 8,
+            "content_html": f"<p>{REPORT_SUBMISSION_TEXT}</p>",
+            "content_text": REPORT_SUBMISSION_TEXT,
+            "word_count": len(REPORT_SUBMISSION_TEXT.split()),
         },
     )
     assert submit_response.status_code == 200

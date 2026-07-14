@@ -1,5 +1,6 @@
 import os
 import asyncio
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -7,11 +8,71 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.core.database import AsyncSessionLocal
+from app.core.responses import ApiException
 from app.main import app
-from app.models import MarkingResult
+from app.models import AIProviderSetting, MarkingResult
+from app.api.marking import TeacherReviewPayload, validate_teacher_review_scores
+from app.services.marking import normalize_ai_marking_payload
 
 
 client = TestClient(app)
+
+SCHOOL_ID = "11111111-1111-4111-8111-111111111111"
+MARKING_SUBMISSION_TEXT = (
+    "I helped my friend at school yesterday when she dropped her books, then we finished "
+    "our class project together before lunch."
+)
+
+
+def non_fifteen_rubric() -> SimpleNamespace:
+    return SimpleNamespace(
+        dimensions=[
+            SimpleNamespace(name="Content", min_score=0, max_score=8),
+            SimpleNamespace(name="Language", min_score=0, max_score=6),
+            SimpleNamespace(name="Organisation", min_score=0, max_score=6),
+        ]
+    )
+
+
+def test_non_fifteen_rubric_validates_teacher_scores_and_normalizes_ai_scores() -> None:
+    review = TeacherReviewPayload(
+        content_score=8,
+        language_score=6,
+        organisation_score=6,
+        total_score=20,
+    )
+    validate_teacher_review_scores(review, non_fifteen_rubric())
+    with pytest.raises(ApiException):
+        validate_teacher_review_scores(
+            TeacherReviewPayload(
+                content_score=9,
+                language_score=6,
+                organisation_score=6,
+                total_score=21,
+            ),
+            non_fifteen_rubric(),
+        )
+
+    normalized = normalize_ai_marking_payload(
+        {
+            "content_score": 9,
+            "language_score": 5,
+            "organisation_score": 4,
+            "total_score": 99,
+            "model_metadata": {"provider_request": "test"},
+        },
+        non_fifteen_rubric().dimensions,
+    )
+
+    assert normalized["content_score"] == 8
+    assert normalized["language_score"] == 5
+    assert normalized["organisation_score"] == 4
+    assert normalized["total_score"] == 17
+    assert normalized["model_metadata"]["rubric_total_score"] == 20
+    assert normalized["model_metadata"]["score_normalization"]["content_score"] == {
+        "provider": 9,
+        "normalized": 8,
+    }
 
 
 def teacher_session() -> TestClient:
@@ -153,9 +214,9 @@ def submit_writing_and_get_marking_result() -> tuple[TestClient, str, str]:
     submit_response = student.post(
         f"/api/student/tasks/{task_id}/submit",
         json={
-            "content_html": "<p>I helped my friend at school yesterday.</p>",
-            "content_text": "I helped my friend at school yesterday.",
-            "word_count": 7,
+            "content_html": f"<p>{MARKING_SUBMISSION_TEXT}</p>",
+            "content_text": MARKING_SUBMISSION_TEXT,
+            "word_count": len(MARKING_SUBMISSION_TEXT.split()),
         },
     )
     assert submit_response.status_code == 200
@@ -198,6 +259,49 @@ async def mark_result_as_ai_marked(marking_result_id: str) -> None:
         ]
         row.warning_flags = []
         row.model_metadata = {"test_setup": "permission_boundary"}
+        await db.commit()
+
+
+async def snapshot_ai_provider_setting() -> dict[str, object] | None:
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(AIProviderSetting).where(AIProviderSetting.school_id == SCHOOL_ID)
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        return {
+            "provider": row.provider,
+            "model": row.model,
+            "base_url": row.base_url,
+            "api_key_secret": row.api_key_secret,
+            "timeout_seconds": row.timeout_seconds,
+            "updated_by": row.updated_by,
+        }
+
+
+async def restore_ai_provider_setting(snapshot: dict[str, object] | None) -> None:
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(AIProviderSetting).where(AIProviderSetting.school_id == SCHOOL_ID)
+        )
+        row = result.scalar_one_or_none()
+        if snapshot is None:
+            if row is not None:
+                await db.delete(row)
+        else:
+            if row is None:
+                row = AIProviderSetting(
+                    school_id=SCHOOL_ID,
+                    provider=str(snapshot["provider"]),
+                )
+                db.add(row)
+            row.provider = str(snapshot["provider"])
+            row.model = snapshot["model"]  # type: ignore[assignment]
+            row.base_url = snapshot["base_url"]  # type: ignore[assignment]
+            row.api_key_secret = snapshot["api_key_secret"]  # type: ignore[assignment]
+            row.timeout_seconds = int(snapshot["timeout_seconds"])
+            row.updated_by = snapshot["updated_by"]  # type: ignore[assignment]
         await db.commit()
 
 
@@ -254,6 +358,40 @@ def test_teacher_review_rejects_invalid_score_payloads() -> None:
 
 @pytest.mark.skipif(
     os.getenv("RUN_DB_TESTS") != "1",
+    reason="Set RUN_DB_TESTS=1 when Postgres is running for admin AI settings tests.",
+)
+def test_admin_ai_settings_masks_api_key() -> None:
+    snapshot = asyncio.run(snapshot_ai_provider_setting())
+    try:
+        admin = admin_session()
+        update_response = admin.patch(
+            "/api/admin/ai/settings",
+            json={
+                "provider": "deepseek",
+                "model": "deepseek-v4-flash",
+                "base_url": "https://api.deepseek.com",
+                "api_key": "sk-demo-secret-123456",
+                "timeout_seconds": 30,
+            },
+        )
+        assert update_response.status_code == 200
+        payload = update_response.json()["data"]
+        assert payload["api_key_configured"] is True
+        assert payload["masked_api_key"] != "sk-demo-secret-123456"
+        assert "secret" not in payload["masked_api_key"]
+
+        settings_response = admin.get("/api/admin/ai/settings")
+        assert settings_response.status_code == 200
+        settings = settings_response.json()["data"]
+        assert settings["api_key_configured"] is True
+        assert settings["masked_api_key"] == payload["masked_api_key"]
+        assert "sk-demo-secret-123456" not in str(settings)
+    finally:
+        asyncio.run(restore_ai_provider_setting(snapshot))
+
+
+@pytest.mark.skipif(
+    os.getenv("RUN_DB_TESTS") != "1",
     reason="Set RUN_DB_TESTS=1 when Postgres is running for marking workflow tests.",
 )
 def test_released_feedback_and_exercises_are_scoped_to_owner_student() -> None:
@@ -267,7 +405,10 @@ def test_released_feedback_and_exercises_are_scoped_to_owner_student() -> None:
     owner = student_session()
     feedback_response = owner.get(f"/api/student/submissions/{submission_id}/feedback")
     assert feedback_response.status_code == 200
-    exercises = feedback_response.json()["data"]["exercises"]
+    feedback = feedback_response.json()["data"]
+    assert "confidence_level" not in feedback["marking_result"]
+    assert "model_metadata" not in feedback["marking_result"]
+    exercises = feedback["exercises"]
     assert exercises
 
     other = other_student_session()
@@ -376,9 +517,9 @@ def test_submission_creates_marking_job_and_teacher_can_mark_and_review() -> Non
     submit_response = student.post(
         f"/api/student/tasks/{task_id}/submit",
         json={
-            "content_html": "<p>I helped my friend at school yesterday.</p>",
-            "content_text": "I helped my friend at school yesterday.",
-            "word_count": 7,
+            "content_html": f"<p>{MARKING_SUBMISSION_TEXT}</p>",
+            "content_text": MARKING_SUBMISSION_TEXT,
+            "word_count": len(MARKING_SUBMISSION_TEXT.split()),
         },
     )
     assert submit_response.status_code == 200
@@ -429,6 +570,8 @@ def test_submission_creates_marking_job_and_teacher_can_mark_and_review() -> Non
     feedback = feedback_response.json()["data"]
     assert feedback["review"]["status"] == "RELEASED"
     assert feedback["review"]["total_score"] == 13
+    assert "confidence_level" not in feedback["marking_result"]
+    assert "model_metadata" not in feedback["marking_result"]
     assert len(feedback["exercises"]) >= 1
 
     exercise_id = feedback["exercises"][0]["id"]

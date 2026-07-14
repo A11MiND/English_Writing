@@ -237,12 +237,13 @@ def test_student_task_list_includes_draft_submission_and_feedback_state() -> Non
     teacher.post(f"/api/teacher/tasks/{task_id}/assignments", json={"class_id": class_id})
 
     student = student_session()
+    draft_text = " ".join(f"word{index}" for index in range(120))
     draft_response = student.put(
         f"/api/student/tasks/{task_id}/draft",
         json={
-            "content_html": "<p>Draft paragraph</p>",
-            "content_text": "Draft paragraph",
-            "word_count": 2,
+            "content_html": f"<p>{draft_text}</p>",
+            "content_text": draft_text,
+            "word_count": 120,
         },
     )
     assert draft_response.status_code == 200

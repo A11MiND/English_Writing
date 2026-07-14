@@ -6,6 +6,8 @@ from app.core.config import Settings
 from app.services.grammar import (
     NormalizedSuggestion,
     check_grammar_with_cache,
+    classify_suggestion_level,
+    is_paragraph_delegated_rule,
     normalized_cache_key,
 )
 
@@ -78,6 +80,7 @@ class RuleBasedTestGrammarAdapter:
                         offset=match.start(),
                         length=match.end() - match.start(),
                         replacements=replacements,
+                        level=classify_suggestion_level(rule_id, category),
                     )
                 )
         return sorted(suggestions, key=lambda suggestion: (suggestion.offset, suggestion.rule_id))
@@ -96,6 +99,8 @@ async def test_test_grammar_adapter_returns_normalized_spans() -> None:
     assert spelling.offset == 12
     assert spelling.length == 3
     assert spelling.replacements == ["the"]
+    assert spelling.level == "WORD"
+    assert suggestions[1].level == "SENTENCE"
 
 
 async def test_grammar_cache_avoids_duplicate_adapter_calls() -> None:
@@ -126,3 +131,8 @@ def test_grammar_cache_key_preserves_internal_spacing() -> None:
         "the  error",
         "en-US",
     )
+
+
+def test_cross_sentence_repetition_is_reserved_for_paragraph_coach() -> None:
+    assert is_paragraph_delegated_rule("ENGLISH_WORD_REPEAT_BEGINNING_RULE") is True
+    assert is_paragraph_delegated_rule("MD_BASEFORM") is False

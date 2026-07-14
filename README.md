@@ -53,7 +53,8 @@ Current UAT readiness is tracked in `docs/uat-readiness.md`. A normal unit-test 
 ```bash
 cd english-ai-writing-platform
 cp .env.example .env
-docker compose up --build
+docker compose up -d --build
+docker compose exec -T api alembic upgrade head
 ```
 
 The services should be available at:
@@ -66,6 +67,31 @@ The services should be available at:
 - PostgreSQL: `localhost:5432`
 - Redis: `localhost:6379`
 - Marking worker: `marking-worker` Docker Compose service
+
+The Docker `web` service builds the Next.js app and runs it with `next start`.
+If you run the web app outside Docker for local UI work, keep the same API
+stack running and start a host production preview on a separate port:
+
+```bash
+pnpm --filter @english-ai-writing/web build
+pnpm --dir apps/web exec next start -H 127.0.0.1 -p 3001
+```
+
+### Temporary team demo link
+
+For a short review session, keep the full Docker stack running and expose only
+the Next.js web entry point through a Cloudflare Quick Tunnel:
+
+```bash
+docker compose up -d
+PUBLIC_DEMO_ACK=I_UNDERSTAND scripts/dev/start_demo_tunnel.sh
+```
+
+The command prints a temporary `https://*.trycloudflare.com` URL. The URL exists
+only while the tunnel process and this machine stay online. It is suitable for a
+controlled demo, not production hosting. Do not share local admin credentials,
+rotate any API key previously pasted into chat, and stop the tunnel after the
+review.
 
 ## Health Checks
 
@@ -123,6 +149,31 @@ CONFIRM_RESET=RESET_UAT_DB scripts/dev/reset_uat_db.sh
 ```
 
 This drops and recreates the local PostgreSQL database, reapplies Alembic migrations and restores the seeded school, users, classes, rubric and writing tasks. Do not run it against any shared or production database.
+
+For product demos, use the friendlier wrapper with the same safety behavior:
+
+```bash
+CONFIRM_RESET=RESET_DEMO_DB scripts/dev/reset_demo_db.sh
+```
+
+Run a real demo smoke check after Docker is up. It verifies web routes, API
+health, Admin LLM connection, teacher prompt generation, LanguageTool-compatible
+grammar checking and Exam Mode suggestion blocking:
+
+```bash
+scripts/dev/check_demo_smoke.sh
+```
+
+Override URLs when needed:
+
+```bash
+WEB_BASE_URL=http://localhost:3000 API_BASE_URL=http://localhost:8000 scripts/dev/check_demo_smoke.sh
+```
+
+The smoke check intentionally uses real API calls. The prompt-generation and AI
+connection checks may create prompt draft and AI usage audit rows in the local
+demo database. Run `CONFIRM_RESET=RESET_DEMO_DB scripts/dev/reset_demo_db.sh`
+when you need to return to a clean seeded demo state.
 
 ## Phase 2 APIs
 
@@ -375,9 +426,9 @@ STRESS_CLASS_ID=<class-id> python tests/stress/report_after_marking.py
 - Local OpenAuth-compatible identities are development/UAT fixtures; production must replace secrets and identity source.
 - CSV import is intentionally simple for Phase 2; it does not yet support file upload validation or complex quoted CSV cells.
 - Imported local users are school data records until matching identities exist in OpenAuth.
-- Phase 3 UI is intentionally utilitarian; it is functional but not polished.
+- The demo UI is aligned to the supplied role-based prototype routes for Admin, Teacher and Student.
 - Phase 3 integration tests create temporary `Test Task` and `Test Rubric` records in the local development database.
-- Phase 4 editor UI is functional but not polished.
+- Parent portal functionality is not part of the current demo scope and is not linked from end-user navigation.
 - Phase 4 integration tests create temporary writing tasks, drafts, submissions and exam events.
 - Phase 5 uses a LanguageTool-compatible service; Docker Compose includes a `grammar-service` image.
 - Suggestion span mapping is implemented for plain text offsets and TipTap inline text; complex rich-text edge cases need broader E2E coverage.

@@ -4,7 +4,7 @@ import { routeForRole } from "./auth";
 
 describe("routeForRole", () => {
   it("routes students to student home", () => {
-    expect(routeForRole("STUDENT")).toBe("/student");
+    expect(routeForRole("STUDENT")).toBe("/student/writing");
   });
 
   it("routes teachers to teacher dashboard", () => {

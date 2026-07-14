@@ -10,7 +10,11 @@ from redis.asyncio import Redis
 
 from app.core.config import Settings, get_settings
 
-GRAMMAR_RULE_CONFIG_VERSION = "2026-06-phase5-v2"
+GRAMMAR_RULE_CONFIG_VERSION = "2026-07-three-level-v2"
+
+PARAGRAPH_DELEGATED_RULES = {
+    "ENGLISH_WORD_REPEAT_BEGINNING_RULE",
+}
 
 
 class GrammarServiceError(Exception):
@@ -27,6 +31,7 @@ class NormalizedSuggestion(BaseModel):
     length: int = Field(ge=1)
     replacements: list[str]
     severity: Literal["INFO", "WARNING", "ERROR"] = "WARNING"
+    level: Literal["WORD", "SENTENCE"]
 
 
 class GrammarAdapter(Protocol):
@@ -70,19 +75,52 @@ class LanguageToolGrammarAdapter:
             offset = int(match.get("offset", 0))
             length = int(match.get("length", 1))
             rule_id = str(rule.get("id") or f"LANGUAGETOOL_{index}")
+            category_id = str(category.get("id") or "GRAMMAR")
+            if is_paragraph_delegated_rule(rule_id):
+                continue
             suggestions.append(
                 NormalizedSuggestion(
                     id=f"{rule_id}:{offset}:{offset + length}",
                     rule_id=rule_id,
-                    category=str(category.get("id") or "GRAMMAR"),
+                    category=category_id,
                     message=str(match.get("message") or "Grammar suggestion."),
                     short_message=str(match.get("shortMessage") or "Suggestion"),
                     offset=offset,
                     length=max(1, length),
                     replacements=replacements,
+                    level=classify_suggestion_level(rule_id, category_id),
                 )
             )
         return suggestions
+
+
+WORD_LEVEL_CATEGORIES = {
+    "CASING",
+    "COMPOUNDING",
+    "CONFUSED_WORDS",
+    "TYPOS",
+    "TYPOGRAPHY",
+}
+
+
+def is_paragraph_delegated_rule(rule_id: str) -> bool:
+    return rule_id.upper() in PARAGRAPH_DELEGATED_RULES
+
+
+def classify_suggestion_level(rule_id: str, category: str) -> Literal["WORD", "SENTENCE"]:
+    """Keep LanguageTool feedback to deterministic word and sentence layers.
+
+    Paragraph-level coaching is deliberately handled by a separate service so the
+    UI never presents a cross-sentence style rule as full paragraph analysis.
+    """
+
+    normalised_rule = rule_id.upper()
+    normalised_category = category.upper()
+    if normalised_category in WORD_LEVEL_CATEGORIES:
+        return "WORD"
+    if normalised_rule.startswith(("MORFOLOGIK_", "HUNSPELL_")):
+        return "WORD"
+    return "SENTENCE"
 
 
 def get_grammar_adapter(settings: Settings | None = None) -> GrammarAdapter:
