@@ -1,4 +1,4 @@
-# English AI Writing Platform 2026-2027
+# English Writing
 
 School-based English AI writing, assessment and reporting platform for W F Joseph Lee Primary School.
 
