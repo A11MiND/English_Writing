@@ -1,0 +1,17 @@
+{
+  "name": "english-ai-writing-platform",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "dev": "pnpm --filter @english-ai-writing/web dev",
+    "build": "pnpm --recursive build",
+    "start:web": "pnpm --filter @english-ai-writing/web start",
+    "test": "pnpm --filter @english-ai-writing/shared --filter @english-ai-writing/web test",
+    "test:e2e": "pnpm --filter @english-ai-writing/e2e test",
+    "lint": "pnpm --filter @english-ai-writing/shared --filter @english-ai-writing/web lint"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
