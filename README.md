@@ -1,6 +1,12 @@
-# English Writing
+# Foxpip — English Writing Platform
+
+[![Next.js](https://img.shields.io/badge/Next.js-frontend-000000)](https://nextjs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688)](https://fastapi.tiangolo.com/)
+[![Status](https://img.shields.io/badge/status-in--development-yellow)]()
 
 An AI-assisted English writing platform for primary-school teachers and pupils. Teachers can create assignments, review submissions, release feedback, and export reports. Pupils can write in a focused editor with word-, sentence-, and paragraph-level language support.
+
+This repository is under active development; see [Production notes](#production-notes) before any real deployment.
 
 ## Included
 
