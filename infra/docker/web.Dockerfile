@@ -13,3 +13,5 @@ COPY packages/shared /app/packages/shared
 COPY apps/web /app/apps/web
 
 EXPOSE 3000
+
+CMD ["sh", "-c", "pnpm --dir apps/web build && pnpm --dir apps/web exec next start -H 0.0.0.0 -p ${PORT:-3000}"]
