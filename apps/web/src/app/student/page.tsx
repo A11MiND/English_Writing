@@ -1,5 +1,5 @@
-import { StudentHome } from "@/components/student-home";
+import { redirect } from "next/navigation";
 
 export default function StudentPage() {
-  return <StudentHome />;
+  redirect("/student/writing");
 }

@@ -1,10 +1,6 @@
-import { StudentFeedback } from "@/components/student-feedback";
+import { redirect } from "next/navigation";
 
-export default async function StudentFeedbackPage({
-  params,
-}: {
-  params: Promise<{ submissionId: string }>;
-}) {
+export default async function LegacyStudentFeedbackPage({ params }: { params: Promise<{ submissionId: string }> }) {
   const { submissionId } = await params;
-  return <StudentFeedback submissionId={submissionId} />;
+  redirect(`/student/feedback/${submissionId}`);
 }

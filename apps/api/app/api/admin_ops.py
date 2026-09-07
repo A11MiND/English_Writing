@@ -13,6 +13,7 @@ from app.core.database import get_session
 from app.core.responses import ApiException, ErrorCode, success_response
 from app.models import AIProviderSetting, AIUsageLog, User, utc_now
 from app.services.ai_settings import get_school_ai_setting, resolve_ai_settings
+from app.services.identity_provisioning import change_identity_password
 from app.services.llm import (
     LLMError,
     LLMGenerationRequest,
@@ -310,3 +311,40 @@ async def update_admin_user_status(
             }
         },
     )
+
+
+class ResetUserPasswordRequest(BaseModel):
+    temporary_password: str = Field(min_length=8, max_length=128)
+
+
+@router.post("/admin/users/{user_id}/password")
+async def reset_admin_user_password(
+    user_id: str,
+    payload: ResetUserPasswordRequest,
+    request: Request,
+    user: Annotated[User, Depends(require_roles(Role.SYSTEM_ADMIN, Role.SCHOOL_ADMIN))],
+    db: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.school_id == user.school_id)
+    )
+    account = result.scalar_one_or_none()
+    if account is None:
+        raise ApiException(ErrorCode.NOT_FOUND, "User account not found.", 404)
+    if account.role == Role.SYSTEM_ADMIN and user.role != Role.SYSTEM_ADMIN:
+        raise ApiException(ErrorCode.ACCESS_DENIED, "Only system admins can modify system admin accounts.", 403)
+
+    await change_identity_password(
+        email=account.email,
+        new_password=payload.temporary_password,
+        current_password=None,
+    )
+    await write_audit_log(
+        db,
+        request,
+        "ACCOUNT_PASSWORD_RESET",
+        user,
+        {"target_user_id": account.id, "target_role": account.role},
+    )
+    await db.commit()
+    return success_response(request, {"reset": True, "email": account.email})

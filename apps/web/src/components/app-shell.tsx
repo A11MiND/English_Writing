@@ -42,7 +42,8 @@ const adminNav: NavItem[] = [
 
 const fallbackNav: NavItem[] = [
   { href: "/student/writing", label: "My writing" },
-  { href: "/student/writing", label: "Feedback" },
+  { href: "/student/practice", label: "My practice" },
+  { href: "/student/writing?view=feedback", label: "Feedback" },
 ];
 
 function navForRole(role: Role) {
@@ -69,6 +70,7 @@ export function AppShell({ title, subtitle, user, children, onLogout, roleNav, v
 
   return (
     <div className={`app-shell ${variant === "review" ? "review-app-shell" : ""}`}>
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <aside className="sidebar">
         <Link className="brand" href={navItems[0]?.href ?? "/"}>
           <img className="brand-mark brand-mark-fox" src="/brand-fox.png" alt="" />
@@ -100,19 +102,21 @@ export function AppShell({ title, subtitle, user, children, onLogout, roleNav, v
               {subtitle ? <p className="panel-subtitle">{subtitle}</p> : null}
             </div>
             <div className="row-actions" style={{ marginTop: 0 }}>
-              <div className="user-chip">
+              <Link className="user-chip" href="/account" aria-label="Your account settings">
                 <span className="avatar">{userInitials}</span>
                 <span>
                   <strong style={{ display: "block", color: "var(--fg)" }}>{user.display_name}</strong>
                   <span className="micro-label">{user.role.replace("_", " ")}</span>
                 </span>
-              </div>
+              </Link>
               <button type="button" onClick={onLogout} className="btn btn-secondary">
                 Logout
               </button>
             </div>
           </header>
-          {children}
+          <div id="main-content" tabIndex={-1}>
+            {children}
+          </div>
         </div>
       </main>
     </div>
@@ -132,6 +136,7 @@ export function ProductTopNav({
 }) {
   return (
     <div className="page">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <header className="top-nav">
         <div className="container nav-inner">
           <Link className="brand" href="/login">
@@ -155,10 +160,19 @@ export function ProductTopNav({
           </nav>
         </div>
       </header>
-      {children}
+      <div id="main-content" tabIndex={-1}>
+        {children}
+      </div>
     </div>
   );
 }
 
 export const teacherNavigation = teacherNav;
 export const adminNavigation = adminNav;
+/** One source of truth for the pupil top nav, so no two entries can point at the same screen. */
+export const studentNavigation: NavItem[] = [
+  { href: "/student/writing", label: "My Writing" },
+  { href: "/student/practice", label: "My Practice" },
+  { href: "/student/writing?view=feedback", label: "Feedback" },
+  { href: "/account", label: "Account" },
+];

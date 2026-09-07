@@ -1,5 +1,5 @@
-import { AdminConsole } from "@/components/admin-console";
+import { AdminWorkspace } from "@/components/admin-workspace";
 
 export default function AdminPage() {
-  return <AdminConsole />;
+  return <AdminWorkspace screen="overview" />;
 }

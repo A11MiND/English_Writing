@@ -8,10 +8,11 @@ import type {
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { ProductTopNav, type AppShellUser } from "@/components/app-shell";
+import { ProductTopNav, studentNavigation, type AppShellUser } from "@/components/app-shell";
 import { MascotGuide } from "@/components/student-mascot";
 import { currentUser, logout } from "@/lib/auth";
 import { generatePersonalPractice, listPersonalPractice } from "@/lib/school-data";
+import { SkeletonScreen } from "@/components/skeleton";
 
 const focusOptions: Array<{
   value: PersonalPracticeFocus;
@@ -109,7 +110,7 @@ export function StudentPractice() {
     window.location.href = "/login";
   }
 
-  if (state.status === "loading") return <main className="loading-state">Preparing your practice desk...</main>;
+  if (state.status === "loading") return <SkeletonScreen label="Preparing your practice desk..." variant="page" />;
   if (state.status === "denied") {
     return <main className="centered-state"><div><h1 className="screen-title">Unable to open practice</h1><p className="lead">{state.message}</p></div></main>;
   }
@@ -117,11 +118,7 @@ export function StudentPractice() {
   return (
     <ProductTopNav
       active="My Practice"
-      links={[
-        { href: "/student/writing", label: "My Writing" },
-        { href: "/student/practice", label: "My Practice" },
-        { href: "/student/writing", label: "Feedback" },
-      ]}
+      links={studentNavigation}
       onLogout={() => void onLogout()}
     >
       <main className="container personal-practice-page">

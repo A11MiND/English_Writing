@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.admin_ops import router as admin_ops_router
 from app.api.account import router as account_router
@@ -15,7 +17,7 @@ from app.api.suggestions import router as suggestions_router
 from app.api.tasks import router as tasks_router
 from app.api.writing import router as writing_router
 from app.core.config import get_settings
-from app.core.responses import ApiException, ErrorCode, error_response
+from app.core.responses import ApiException, ErrorCode, describe_validation_errors, error_response
 from app.middleware import request_id_middleware
 
 
@@ -51,6 +53,21 @@ def create_app() -> FastAPI:
             status_code=exc.status_code,
             content=error_response(request, exc.error_code, exc.message),
         )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content=error_response(request, ErrorCode.VALIDATION_ERROR, describe_validation_errors(exc.errors())),
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        code = ErrorCode.NOT_FOUND if exc.status_code == 404 else ErrorCode.VALIDATION_ERROR
+        if exc.status_code in (401, 403):
+            code = ErrorCode.AUTH_REQUIRED if exc.status_code == 401 else ErrorCode.ACCESS_DENIED
+        detail = exc.detail if isinstance(exc.detail, str) else "Request could not be completed."
+        return JSONResponse(status_code=exc.status_code, content=error_response(request, code, detail))
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

@@ -4,11 +4,12 @@ import type { PersonalPracticeResult } from "@english-ai-writing/shared";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { ProductTopNav } from "@/components/app-shell";
+import { ProductTopNav, studentNavigation } from "@/components/app-shell";
 import { MascotGuide } from "@/components/student-mascot";
 import { ReadAloudButton } from "@/components/read-aloud-button";
 import { currentUser, logout } from "@/lib/auth";
 import { getPersonalPracticeResult } from "@/lib/school-data";
+import { SkeletonScreen } from "@/components/skeleton";
 
 type ResultState =
   | { status: "loading" }
@@ -49,7 +50,7 @@ export function PersonalPracticeResultPage({ taskId }: { taskId: string }) {
     window.location.href = "/login";
   }
 
-  if (state.status === "loading") return <main className="loading-state">Opening your practice feedback...</main>;
+  if (state.status === "loading") return <SkeletonScreen label="Opening your practice feedback..." variant="page" />;
   if (state.status === "error") return <main className="centered-state"><div><h1 className="screen-title">Feedback unavailable</h1><p className="lead">{state.message}</p></div></main>;
 
   const { task, submission, marking_result: marking } = state.result;
@@ -62,11 +63,7 @@ export function PersonalPracticeResultPage({ taskId }: { taskId: string }) {
   return (
     <ProductTopNav
       active="My Practice"
-      links={[
-        { href: "/student/writing", label: "My Writing" },
-        { href: "/student/practice", label: "My Practice" },
-        { href: "/student/writing", label: "Feedback" },
-      ]}
+      links={studentNavigation}
       onLogout={() => void onLogout()}
     >
       <main className="container practice-result-page">

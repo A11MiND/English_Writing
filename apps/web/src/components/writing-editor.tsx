@@ -24,6 +24,7 @@ import {
 } from "@/components/grammar-suggestion-popover";
 import { ReadAloudButton } from "@/components/read-aloud-button";
 import { WritingLanguageSupport } from "@/components/writing-language-support";
+import { SkeletonScreen } from "@/components/skeleton";
 import {
   checkParagraphSuggestions,
   checkWritingSuggestions,
@@ -670,7 +671,7 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
   }
 
   if (state.status === "loading") {
-    return <main className="loading-state">Loading editor...</main>;
+    return <SkeletonScreen label="Loading editor..." variant="page" />;
   }
 
   if (state.status === "denied") {
@@ -804,9 +805,19 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
         </Link>
 
         <ol className="writing-steps" aria-label="Writing progress">
-          <li className="active"><span>1</span>Draft</li>
-          <li><span>2</span>Polish</li>
-          <li><span>3</span>Share</li>
+          {(["Draft", "Polish", "Share"] as const).map((label, index) => {
+            const stage = locked ? 2 : wordCount >= minimumWords ? 1 : 0;
+            return (
+              <li
+                key={label}
+                className={index === stage ? "active" : index < stage ? "done" : ""}
+                aria-current={index === stage ? "step" : undefined}
+              >
+                <span>{index + 1}</span>
+                {label}
+              </li>
+            );
+          })}
         </ol>
 
         <div className="story-profile">

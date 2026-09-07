@@ -18,6 +18,7 @@ import Link from "next/link";
 import { AppShell, type AppShellUser } from "@/components/app-shell";
 import { TeacherReviewDesk } from "@/components/teacher-review-desk";
 import { currentUser, logout } from "@/lib/auth";
+import { SkeletonScreen } from "@/components/skeleton";
 import {
   assignTask,
   authenticatedMediaUrl,
@@ -247,6 +248,7 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
   const [selectedSubmissionId, setSelectedSubmissionId] = useState("");
   const [releaseTarget, setReleaseTarget] = useState<string | null>(null);
   const [acceptedSuggestionIds, setAcceptedSuggestionIds] = useState<Set<string>>(new Set());
+  const [ignoredSuggestionIds, setIgnoredSuggestionIds] = useState<Set<string>>(new Set());
   const [reviewDrafts, setReviewDrafts] = useState<Record<string, ReviewDraft>>({});
   const [promptDraft, setPromptDraft] = useState<{
     title: string;
@@ -297,6 +299,24 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
         },
       };
     });
+  }
+
+  function acceptSuggestionIntoReview(markingResultId: string, suggestionId: string, message: string) {
+    setReviewDrafts((current) => {
+      const existing = current[markingResultId];
+      const notes = existing?.notes ?? "";
+      return {
+        ...current,
+        [markingResultId]: {
+          content: existing?.content ?? "",
+          language: existing?.language ?? "",
+          organisation: existing?.organisation ?? "",
+          notes: notes.trim() ? `${notes.trim()}\n\n${message}` : message,
+        },
+      };
+    });
+    setAcceptedSuggestionIds((current) => new Set(current).add(suggestionId));
+    showToast("Added to your final comment. Edit it in the Release tab before saving.");
   }
 
   async function refresh(user?: AppShellUser) {
@@ -724,7 +744,7 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
   }
 
   if (state.status === "loading") {
-    return <main className="loading-state">Loading teacher workspace...</main>;
+    return <SkeletonScreen label="Loading teacher workspace..." variant="workspace" />;
   }
 
   if (state.status === "denied") {
@@ -1033,8 +1053,9 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
                     ...selectedResult.sentence_level_comments.slice(0, 2).map((comment) => comment.comment),
                   ]
                     .filter(Boolean)
-                    .map((message, index) => {
-                      const id = `${selectedResult.id}-${index}`;
+                    .map((message, index) => ({ message, id: `${selectedResult.id}-${index}`, index }))
+                    .filter(({ id }) => !ignoredSuggestionIds.has(id))
+                    .map(({ message, id, index }) => {
                       return (
                         <div
                           key={id}
@@ -1050,14 +1071,15 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
                               type="button"
                               className="btn btn-primary"
                               disabled={acceptedSuggestionIds.has(id)}
-                              onClick={() => {
-                                setAcceptedSuggestionIds((current) => new Set(current).add(id));
-                                showToast("Suggestion added to the teacher review draft.");
-                              }}
+                              onClick={() => acceptSuggestionIntoReview(selectedResult.id, id, String(message))}
                             >
-                              {acceptedSuggestionIds.has(id) ? "Accepted" : "Accept into review"}
+                              {acceptedSuggestionIds.has(id) ? "Added to your comment" : "Accept into review"}
                             </button>
-                            <button type="button" className="btn btn-ghost">
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              onClick={() => setIgnoredSuggestionIds((current) => new Set(current).add(id))}
+                            >
                               Ignore
                             </button>
                           </div>
@@ -1774,9 +1796,13 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
                   </div>
                   <div className="chart-bars">
                     {Object.entries(classReport.score_distribution).map(([bucket, count]) => (
-                      <div key={bucket} className={bucket === "unscored" ? "chart-bar muted" : "chart-bar"}>
+                      <div
+                        key={bucket}
+                        className={bucket === "unscored" ? "chart-bar muted" : "chart-bar"}
+                        data-empty={count === 0 ? "true" : "false"}
+                      >
                         <strong>{count}</strong>
-                        <span style={{ height: `${Math.max(12, Math.round((count / reportDistributionMax) * 100))}%` }} />
+                        <span style={count === 0 ? undefined : { height: `${Math.round((count / reportDistributionMax) * 100)}%` }} />
                         <small>{bucket}</small>
                       </div>
                     ))}
@@ -1957,8 +1983,4 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
       <div className={`toast ${toast ? "show" : ""}`} role="status" aria-live="polite">{toast}</div>
     </AppShell>
   );
-}
-
-export function TeacherDashboard() {
-  return <TeacherWorkspace screen="marking" />;
 }

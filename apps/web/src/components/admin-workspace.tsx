@@ -15,6 +15,7 @@ import Link from "next/link";
 
 import { AppShell, type AppShellUser } from "@/components/app-shell";
 import { currentUser, logout } from "@/lib/auth";
+import { SkeletonScreen } from "@/components/skeleton";
 import {
   createClass,
   getAiSettings,
@@ -26,6 +27,7 @@ import {
   testAiConnection,
   updateAiSettings,
   updateUserStatus,
+  resetUserPassword,
 } from "@/lib/school-data";
 
 export type AdminScreen = "overview" | "classes" | "settings";
@@ -71,6 +73,9 @@ export function AdminWorkspace({ screen }: { screen: AdminScreen }) {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
+  const [resetTarget, setResetTarget] = useState<{ id: string; email: string } | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetBusyUserId, setResetBusyUserId] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<ImportUsersPayload | null>(null);
   const [settings, setSettings] = useState({
     requireTeacherRelease: true,
@@ -192,6 +197,27 @@ export function AdminWorkspace({ screen }: { screen: AdminScreen }) {
     setCsv(await file.text());
   }
 
+  async function onConfirmReset() {
+    if (!resetTarget) return;
+    if (resetPassword.length < 8) {
+      setError("A temporary password needs at least 8 characters.");
+      return;
+    }
+    setResetBusyUserId(resetTarget.id);
+    setError("");
+    setNotice("");
+    try {
+      await resetUserPassword(resetTarget.id, resetPassword);
+      setNotice(`Temporary password set for ${resetTarget.email}. Share it with them directly.`);
+      setResetTarget(null);
+      setResetPassword("");
+    } catch (resetError) {
+      setError(resetError instanceof Error ? resetError.message : "Unable to reset this password.");
+    } finally {
+      setResetBusyUserId(null);
+    }
+  }
+
   async function onUpdateStatus(userId: string, status: AccountStatus) {
     setNotice("");
     setError("");
@@ -239,7 +265,7 @@ export function AdminWorkspace({ screen }: { screen: AdminScreen }) {
   }
 
   if (state.status === "loading") {
-    return <main className="loading-state">Loading admin workspace...</main>;
+    return <SkeletonScreen label="Loading admin workspace..." variant="workspace" />;
   }
 
   if (state.status === "denied") {
@@ -422,6 +448,14 @@ export function AdminWorkspace({ screen }: { screen: AdminScreen }) {
                       <td>{account.class_name ?? account.staff_code ?? "-"}</td>
                       <td>
                         <div className="row-actions" style={{ marginTop: 0 }}>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            disabled={resetBusyUserId === account.id}
+                            onClick={() => setResetTarget({ id: account.id, email: account.email })}
+                          >
+                            {resetBusyUserId === account.id ? "Resetting…" : "Reset password"}
+                          </button>
                           {account.status !== "ACTIVE" ? (
                             <button type="button" className="btn btn-secondary" onClick={() => void onUpdateStatus(account.id, "ACTIVE")}>Restore</button>
                           ) : null}
@@ -597,11 +631,52 @@ export function AdminWorkspace({ screen }: { screen: AdminScreen }) {
         </>
       ) : null}
 
+      <div className={`modal-backdrop ${resetTarget ? "open" : ""}`} role="dialog" aria-modal="true" aria-labelledby="reset-password-title">
+        <div className="modal">
+          <p className="eyebrow">Account recovery</p>
+          <h2 className="panel-title" id="reset-password-title" style={{ fontSize: "var(--text-xl)", marginTop: 8 }}>
+            Set a temporary password
+          </h2>
+          <p className="panel-subtitle" style={{ marginTop: 12 }}>
+            {resetTarget?.email} will sign in with this password. Share it with them directly and ask them to
+            change it from their account page.
+          </p>
+          <div className="field" style={{ marginTop: 18 }}>
+            <label htmlFor="reset-password">Temporary password</label>
+            <input
+              id="reset-password"
+              className="input"
+              type="text"
+              autoComplete="off"
+              minLength={8}
+              value={resetPassword}
+              onChange={(event) => setResetPassword(event.target.value)}
+            />
+            <p className="panel-subtitle">At least 8 characters.</p>
+          </div>
+          <div className="row-actions">
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => {
+                setResetTarget(null);
+                setResetPassword("");
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary"
+              type="button"
+              disabled={resetPassword.length < 8 || resetBusyUserId !== null}
+              onClick={() => void onConfirmReset()}
+            >
+              {resetBusyUserId ? "Resetting…" : "Set password"}
+            </button>
+          </div>
+        </div>
+      </div>
       <div className={`toast ${toast ? "show" : ""}`} role="status" aria-live="polite">{toast}</div>
     </AppShell>
   );
-}
-
-export function AdminConsole() {
-  return <AdminWorkspace screen="overview" />;
 }

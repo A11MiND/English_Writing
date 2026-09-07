@@ -66,3 +66,15 @@ def error_response(request: Request, error_code: str, message: str) -> dict[str,
         "message": message,
         "request_id": request_id_from(request),
     }
+
+
+def describe_validation_errors(errors: list[dict[str, Any]]) -> str:
+    """Turn pydantic's error list into one sentence naming the fields at fault."""
+    parts: list[str] = []
+    for error in errors:
+        location = [str(item) for item in error.get("loc", ()) if str(item) not in {"body", "query", "path"}]
+        field = " → ".join(location) if location else "request"
+        parts.append(f"{field}: {error.get('msg', 'is invalid')}")
+    if not parts:
+        return "The request could not be validated."
+    return "; ".join(parts[:5])

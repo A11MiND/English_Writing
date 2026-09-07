@@ -107,6 +107,12 @@ class RegisterIdentityRequest(BaseModel):
     role: str = Field(pattern="^STUDENT$")
 
 
+class SetPasswordRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    new_password: str = Field(min_length=8, max_length=128)
+    current_password: str | None = Field(default=None, max_length=128)
+
+
 identity_file_lock = Lock()
 
 
@@ -145,6 +151,49 @@ def persist_registered_identity(
         temporary_path.write_text(json.dumps(raw_users, indent=2), encoding="utf-8")
         temporary_path.replace(path)
         return user
+
+
+def persist_password_change(
+    payload: SetPasswordRequest,
+    settings: Settings,
+    store: IdentityStore,
+) -> AuthUser:
+    email = payload.email.lower().strip()
+    existing = store.users_by_email.get(email)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="No account exists for that email.")
+    if existing.status != "ACTIVE":
+        raise HTTPException(status_code=403, detail="Account is not active.")
+    if payload.current_password is not None and not verify_password(
+        payload.current_password, existing.password_hash
+    ):
+        raise HTTPException(status_code=401, detail="Current password is incorrect.")
+    if not settings.openauth_registered_users_json_file:
+        raise HTTPException(status_code=503, detail="Registered identity storage is not configured.")
+
+    updated = existing.model_copy(update={"password_hash": hash_password(payload.new_password)})
+    path = Path(settings.openauth_registered_users_json_file)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with identity_file_lock:
+        try:
+            raw_users = json.loads(path.read_text(encoding="utf-8")) if path.exists() else []
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=500, detail="Registered identity storage is invalid.") from exc
+        record = updated.model_dump(by_alias=True)
+        # Fixture identities live in env config, so an override row is appended for them.
+        # The store applies registered rows last, so the override wins on the next read.
+        replaced = False
+        for index, item in enumerate(raw_users):
+            if str(item.get("email", "")).lower().strip() == email:
+                raw_users[index] = record
+                replaced = True
+                break
+        if not replaced:
+            raw_users.append(record)
+        temporary_path = path.with_suffix(f"{path.suffix}.tmp")
+        temporary_path.write_text(json.dumps(raw_users, indent=2), encoding="utf-8")
+        temporary_path.replace(path)
+    return updated
 
 
 def sign_payload(payload: dict, settings: Settings) -> str:
@@ -204,6 +253,21 @@ async def register_identity(
         raise HTTPException(status_code=401, detail="Invalid identity provisioning client.")
     user = persist_registered_identity(payload, settings, store)
     return {"sub": user.user_id, "email": user.email, "role": user.role}
+
+
+@app.post("/internal/users/password")
+async def set_identity_password(
+    payload: SetPasswordRequest,
+    settings: Annotated[Settings, Depends(get_settings)],
+    store: Annotated[IdentityStore, Depends(get_identity_store)],
+    x_openauth_client_secret: Annotated[str | None, Header()] = None,
+) -> dict:
+    if not x_openauth_client_secret or not hmac.compare_digest(
+        x_openauth_client_secret, settings.openauth_client_secret
+    ):
+        raise HTTPException(status_code=401, detail="Invalid identity provisioning client.")
+    user = persist_password_change(payload, settings, store)
+    return {"sub": user.user_id, "email": user.email}
 
 
 @app.post("/oauth/token")

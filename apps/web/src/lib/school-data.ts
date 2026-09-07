@@ -58,13 +58,29 @@ async function parseApiResponse<T>(response: Response): Promise<ApiResponse<T>> 
   return (await response.json()) as ApiResponse<T>;
 }
 
+type ValidationDetail = { loc?: unknown[]; msg?: string };
+
 async function parseApiError(response: Response, fallback: string): Promise<string> {
   try {
     const contentType = response.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
-      const body = (await response.json()) as Partial<ApiResponse<unknown>>;
+      const body = (await response.json()) as Partial<ApiResponse<unknown>> & { detail?: unknown };
       if (body && "success" in body && body.success === false && body.message) {
         return body.message;
+      }
+      // A gateway or an older API build can still answer in FastAPI's own shape.
+      if (typeof body?.detail === "string") return body.detail;
+      if (Array.isArray(body?.detail)) {
+        const described = (body.detail as ValidationDetail[])
+          .map((item) => {
+            const field = (item.loc ?? [])
+              .map(String)
+              .filter((part) => !["body", "query", "path"].includes(part))
+              .join(" → ");
+            return field ? `${field}: ${item.msg ?? "is invalid"}` : item.msg ?? "";
+          })
+          .filter(Boolean);
+        if (described.length) return described.slice(0, 5).join("; ");
       }
     }
   } catch {
@@ -874,4 +890,24 @@ export async function downloadClassReport(
     bytes: blob.size,
     content_type: blob.type || response.headers.get("content-type") || "",
   };
+}
+
+export async function changeOwnPassword(currentPassword: string, newPassword: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}/api/account/password`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Unable to change your password."));
+}
+
+export async function resetUserPassword(userId: string, temporaryPassword: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}/api/admin/users/${userId}/password`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ temporary_password: temporaryPassword }),
+  });
+  if (!response.ok) throw new Error(await parseApiError(response, "Unable to reset this password."));
 }

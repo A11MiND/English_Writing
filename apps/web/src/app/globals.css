@@ -2939,8 +2939,9 @@ img.brand-mark {
 }
 
 .report-export-history .empty-state {
-  border-color: rgba(255, 255, 255, 0.14);
-  color: rgba(255, 255, 255, 0.6);
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .screen-status {
@@ -3027,7 +3028,15 @@ img.brand-mark {
 .chart-bar span {
   border-radius: var(--radius-pill) var(--radius-pill) 4px 4px;
   background: var(--accent);
-  min-height: 22px;
+  min-height: 8px;
+}
+
+/* A bucket with no pupils must not read as a bar. */
+.chart-bar[data-empty="true"] span {
+  min-height: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--border);
 }
 
 .chart-bar.muted span {
@@ -3407,6 +3416,17 @@ img.brand-mark {
 .writing-steps li.active span {
   border-color: var(--accent);
   background: var(--accent);
+  color: white;
+}
+
+.writing-steps li.done {
+  border-bottom-color: var(--success);
+  color: var(--success);
+}
+
+.writing-steps li.done span {
+  border-color: var(--success);
+  background: var(--success);
   color: white;
 }
 
@@ -6394,4 +6414,85 @@ html {
   margin-top: 6px;
   padding-inline: 0;
   font-size: var(--text-sm);
+}
+
+/* ---- Loading skeletons ---- */
+
+.skeleton-screen {
+  display: grid;
+  gap: var(--space-5);
+  width: min(100%, 1180px);
+  margin-inline: auto;
+  padding: var(--space-6) var(--space-5);
+}
+
+.skeleton-header {
+  display: grid;
+  gap: 12px;
+}
+
+.skeleton-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: var(--space-4);
+}
+
+.skeleton-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  padding: var(--space-5);
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    90deg,
+    var(--surface) 25%,
+    var(--surface-warm) 37%,
+    var(--surface) 63%
+  );
+  background-size: 400% 100%;
+  animation: skeleton-sheen 1.4s ease-in-out infinite;
+}
+
+.skeleton-eyebrow { width: 140px; height: 10px; }
+.skeleton-title { width: min(420px, 70%); height: 30px; }
+.skeleton-lead { width: min(560px, 90%); }
+.skeleton-chip { width: 84px; height: 20px; }
+.skeleton-heading { width: 70%; height: 20px; }
+.skeleton-short { width: 45%; }
+
+@keyframes skeleton-sheen {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line {
+    animation: none;
+  }
+}
+
+/* ---- Skip link ---- */
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  z-index: 100;
+  border-radius: var(--radius-md);
+  background: var(--fg);
+  padding: 12px 18px;
+  color: var(--bg);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.skip-link:focus-visible {
+  left: var(--space-4);
+  top: var(--space-4);
 }

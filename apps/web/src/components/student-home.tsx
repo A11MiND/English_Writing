@@ -2,12 +2,14 @@
 
 import type { WritingTask } from "@english-ai-writing/shared";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { ProductTopNav, type AppShellUser } from "@/components/app-shell";
+import { ProductTopNav, studentNavigation, type AppShellUser } from "@/components/app-shell";
 import { MascotGuide } from "@/components/student-mascot";
 import { currentUser, logout } from "@/lib/auth";
 import { getStudentProfile, listStudentTasks } from "@/lib/school-data";
+import { SkeletonScreen } from "@/components/skeleton";
 
 type StudentProfile = {
   student_number: string;
@@ -24,7 +26,7 @@ type StudentTaskView = "next" | "feedback" | "history";
 
 function taskHref(task: WritingTask) {
   if (task.feedback_released && task.submission_id) return `/student/feedback/${task.submission_id}`;
-  if (task.mode === "EXAM") return `/student/exam/${task.id}`;
+  if (task.mode === "EXAM") return `/student/tasks/${task.id}/exam`;
   return `/student/tasks/${task.id}/practice`;
 }
 
@@ -51,7 +53,11 @@ function statusBadge(task: WritingTask) {
 
 export function StudentHome() {
   const [state, setState] = useState<StudentState>({ status: "loading" });
-  const [taskView, setTaskView] = useState<StudentTaskView>("next");
+  const searchParams = useSearchParams();
+  const requestedView = searchParams.get("view");
+  const [taskView, setTaskView] = useState<StudentTaskView>(
+    requestedView === "feedback" || requestedView === "history" ? requestedView : "next",
+  );
   const [showAllTasks, setShowAllTasks] = useState(false);
 
   useEffect(() => {
@@ -89,7 +95,7 @@ export function StudentHome() {
   }
 
   if (state.status === "loading") {
-    return <main className="loading-state">Loading student writing...</main>;
+    return <SkeletonScreen label="Loading student writing..." variant="page" />;
   }
 
   if (state.status === "denied") {
@@ -121,29 +127,29 @@ export function StudentHome() {
   return (
     <ProductTopNav
       active="My Writing"
-      links={[
-        { href: "/student/writing", label: "My Writing" },
-        { href: "/student/practice", label: "My Practice" },
-        { href: latestFeedback ? `/student/feedback/${latestFeedback.submission_id}` : "/student/writing", label: "Feedback" },
-      ]}
+      links={studentNavigation}
       onLogout={() => void onLogout()}
     >
       <main className="container">
         <section className="hero student-home-hero">
           <div className="hero-copy">
-            <p className="eyebrow">Welcome back, {state.user.display_name.split(" ")[0]}</p>
+            <p className="eyebrow">Welcome back, {state.user.display_name}</p>
             <h1>Your next story starts here.</h1>
             <p className="lead">
               Pick up your next writing task, read a teacher’s feedback, or look back at how far your writing has come.
             </p>
             <div className="hero-actions">
-              <Link className="btn btn-primary" href={toWriteTasks[0] ? taskHref(toWriteTasks[0]) : "/student/writing"} aria-disabled={!toWriteTasks[0]}>
-                {toWriteTasks[0] ? "Continue my next task" : "View my writing"}
-              </Link>
-              <Link className="btn btn-secondary" href={latestFeedback ? `/student/feedback/${latestFeedback.submission_id}` : "/student/writing"} aria-disabled={!latestFeedback}>
-                Read latest feedback
-              </Link>
-              <Link className="btn btn-secondary" href="/student/practice">
+              {toWriteTasks[0] ? (
+                <Link className="btn btn-primary" href={taskHref(toWriteTasks[0])}>
+                  Continue my next task
+                </Link>
+              ) : null}
+              {latestFeedback ? (
+                <Link className="btn btn-secondary" href={`/student/feedback/${latestFeedback.submission_id}`}>
+                  Read latest feedback
+                </Link>
+              ) : null}
+              <Link className={toWriteTasks[0] ? "btn btn-secondary" : "btn btn-primary"} href="/student/practice">
                 Make my own practice
               </Link>
             </div>

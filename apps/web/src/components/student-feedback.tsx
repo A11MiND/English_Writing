@@ -4,11 +4,12 @@ import type { StudentFeedback as StudentFeedbackPayload } from "@english-ai-writ
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { ProductTopNav } from "@/components/app-shell";
+import { ProductTopNav, studentNavigation } from "@/components/app-shell";
 import { MascotGuide } from "@/components/student-mascot";
 import { ReadAloudButton } from "@/components/read-aloud-button";
 import { currentUser, logout } from "@/lib/auth";
 import { completeExercise, getStudentFeedback } from "@/lib/school-data";
+import { SkeletonScreen } from "@/components/skeleton";
 
 type FeedbackState =
   | { status: "loading" }
@@ -64,7 +65,7 @@ export function StudentFeedback({ submissionId }: { submissionId: string }) {
   }
 
   if (state.status === "loading") {
-    return <main className="loading-state">Loading feedback...</main>;
+    return <SkeletonScreen label="Loading feedback..." variant="page" />;
   }
 
   if (state.status === "denied") {
@@ -94,10 +95,7 @@ export function StudentFeedback({ submissionId }: { submissionId: string }) {
   return (
     <ProductTopNav
       active="Feedback"
-      links={[
-        { href: "/student/writing", label: "My Writing" },
-        { href: `/student/feedback/${submissionId}`, label: "Feedback" },
-      ]}
+      links={studentNavigation}
       onLogout={() => void onLogout()}
     >
       <main className="container" data-testid="released-feedback">

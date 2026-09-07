@@ -1,10 +1,6 @@
-import { WritingEditor } from "@/components/writing-editor";
+import { redirect } from "next/navigation";
 
-type PageProps = {
-  params: Promise<{ taskId: string }>;
-};
-
-export default async function StudentExamPage({ params }: PageProps) {
+export default async function LegacyStudentExamPage({ params }: { params: Promise<{ taskId: string }> }) {
   const { taskId } = await params;
-  return <WritingEditor taskId={taskId} expectedMode="EXAM" />;
+  redirect(`/student/tasks/${taskId}/exam`);
 }
