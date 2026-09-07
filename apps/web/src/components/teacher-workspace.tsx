@@ -42,7 +42,7 @@ import {
   updateTask,
 } from "@/lib/school-data";
 
-export type TeacherScreen = "home" | "marking" | "assignments" | "questions" | "reports" | "pupils";
+export type TeacherScreen = "home" | "marking" | "assignments" | "reports" | "pupils";
 
 type TeacherState =
   | { status: "loading" }
@@ -114,11 +114,7 @@ const screenCopy: Record<TeacherScreen, { title: string; subtitle: string }> = {
   },
   assignments: {
     title: "Prepare & assign",
-    subtitle: "Draft a prompt, shape the task, and publish it to a class in one place.",
-  },
-  questions: {
-    title: "Prepare & assign",
-    subtitle: "Draft a prompt, shape the task, and publish it to a class in one place.",
+    subtitle: "See what pupils are working on, and publish new writing when you are ready.",
   },
   reports: {
     title: "Class insights",
@@ -169,6 +165,38 @@ function createDefaultTaskForm(rubricId = ""): TaskForm {
     status: "PUBLISHED",
     rubric_id: rubricId,
   };
+}
+
+function ReleaseModal({
+  open,
+  onCancel,
+  onConfirm,
+}: {
+  open: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className={`modal-backdrop ${open ? "open" : ""}`} role="dialog" aria-modal="true" aria-labelledby="release-title">
+      <div className="modal">
+        <p className="eyebrow">Final teacher action</p>
+        <h2 className="panel-title" id="release-title" style={{ fontSize: "var(--text-xl)", marginTop: 8 }}>
+          Release this feedback to the student?
+        </h2>
+        <p className="panel-subtitle" style={{ marginTop: 12 }}>
+          The student will see only the teacher-confirmed score, final comment, and attached practice tasks.
+        </p>
+        <div className="row-actions">
+          <button className="btn btn-secondary" type="button" onClick={onCancel}>
+            Review again
+          </button>
+          <button className="btn teacher-release-button" type="button" onClick={onConfirm}>
+            Release now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function Metric({ label, value, note }: { label: string; value: string | number; note: string }) {
@@ -227,13 +255,13 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
     source?: PromptDraft;
   } | null>(null);
   const [promptBusy, setPromptBusy] = useState(false);
-  const [questionForm, setQuestionForm] = useState({
-    level: "P5",
-    mode: "Practice Mode",
-    focus: "Past tense verbs, event sequence, and reflection",
-    wordRange: "120-180",
-    rubric: "",
-  });
+  const [teachingFocus, setTeachingFocus] = useState("Past tense verbs, event sequence, and reflection");
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [aiAssistOpen, setAiAssistOpen] = useState(false);
+  const [rubricFormOpen, setRubricFormOpen] = useState(false);
+  const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+  const [openTaskMenuId, setOpenTaskMenuId] = useState<string | null>(null);
+  const [previousInstruction, setPreviousInstruction] = useState<{ title: string; instruction: string } | null>(null);
   const [reportClassId, setReportClassId] = useState("");
   const [reportTaskId, setReportTaskId] = useState("");
   const [classReport, setClassReport] = useState<ClassReportPayload | null>(null);
@@ -286,7 +314,6 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
       return { status: "ready", user: shellUser, classes, rubrics, tasks, markingItems, students, capabilities };
     });
     setTaskForm((current) => ({ ...current, rubric_id: current.rubric_id || rubrics[0]?.id || "" }));
-    setQuestionForm((current) => ({ ...current, rubric: current.rubric || rubrics[0]?.id || "" }));
     setAssignmentForm((current) => ({
       task_id: current.task_id || tasks[0]?.id || "",
       class_id: current.class_id || classes.find((schoolClass) => schoolClass.name === "P5A")?.id || classes[0]?.id || "",
@@ -390,7 +417,7 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
     }
   }
 
-  async function createTaskFromForm(status: "DRAFT" | "PUBLISHED") {
+  async function createTaskFromForm(status: "DRAFT" | "PUBLISHED"): Promise<boolean> {
     setNotice("");
     setError("");
     try {
@@ -425,8 +452,40 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
           : "Draft saved. You can return to it before publishing.",
       );
       await refresh();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : status === "PUBLISHED" ? "Unable to publish this task." : "Unable to save this draft.");
+      return false;
+    }
+  }
+
+  async function saveTaskAndClose(status: "DRAFT" | "PUBLISHED") {
+    const saved = await createTaskFromForm(status);
+    if (!saved) return;
+    setComposerOpen(false);
+    setAiAssistOpen(false);
+    setRubricFormOpen(false);
+    setPromptDraft(null);
+    setPreviousInstruction(null);
+  }
+
+  async function onCreateRubricDirect() {
+    setNotice("");
+    setError("");
+    try {
+      const rubric = await createRubric({
+        title: rubricForm.title,
+        level: rubricForm.level,
+        total_score: defaultDimensions.reduce((sum, dimension) => sum + dimension.max_score, 0),
+        status: "ACTIVE",
+        dimensions: defaultDimensions,
+      });
+      setTaskForm((current) => ({ ...current, rubric_id: rubric.id }));
+      setRubricFormOpen(false);
+      showToast(`Rubric “${rubric.title}” created and selected.`);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create this rubric.");
     }
   }
 
@@ -616,33 +675,36 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
   }
 
   async function onGeneratePromptDraft() {
-    if (!questionForm.rubric) {
+    if (!taskForm.rubric_id) {
       setError("Select a rubric before generating a prompt.");
       return;
     }
-    const [minimumRaw, maximumRaw] = questionForm.wordRange.split("-").map((part) => Number(part.trim()));
+    const minimumRaw = Number(taskForm.word_minimum);
+    const maximumRaw = Number(taskForm.word_maximum);
     setPromptBusy(true);
     setError("");
     setNotice("");
     showToast("Generating prompt draft.");
     try {
       const draft = await generatePromptDraftApi({
-        level: questionForm.level,
-        mode: questionForm.mode === "Exam Mode" ? "EXAM" : "PRACTICE",
-        teaching_focus: questionForm.focus,
-        word_minimum: Number.isFinite(minimumRaw) ? minimumRaw : null,
-        word_maximum: Number.isFinite(maximumRaw) ? maximumRaw : null,
-        exam_duration_minutes: questionForm.mode === "Exam Mode" ? 30 : null,
-        rubric_id: questionForm.rubric,
+        level: taskForm.level,
+        mode: taskForm.mode,
+        teaching_focus: teachingFocus,
+        word_minimum: Number.isFinite(minimumRaw) && minimumRaw > 0 ? minimumRaw : null,
+        word_maximum: Number.isFinite(maximumRaw) && maximumRaw > 0 ? maximumRaw : null,
+        exam_duration_minutes: taskForm.mode === "EXAM" ? Number(taskForm.exam_duration_minutes) || 30 : null,
+        rubric_id: taskForm.rubric_id,
       });
+      setPreviousInstruction({ title: taskForm.title, instruction: taskForm.instruction });
       setPromptDraft({
         title: draft.title,
         body: draft.instruction,
         focus: draft.rubric_notes,
         source: draft,
       });
-      setNotice("Prompt draft generated. Review it before using it in an assignment.");
-      showToast("Prompt draft generated. Review it before publishing.");
+      setTaskForm((current) => ({ ...current, title: draft.title, instruction: draft.instruction }));
+      setAiAssistOpen(false);
+      showToast("Pip filled in the title and instruction. Edit anything before publishing.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to generate prompt draft.");
     } finally {
@@ -720,6 +782,20 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
     return task.status === "PUBLISHED";
   });
   const selectedClass = state.classes.find((schoolClass) => schoolClass.id === assignmentForm.class_id);
+  const wordMinimum = Number(taskForm.word_minimum);
+  const wordMaximum = Number(taskForm.word_maximum);
+  const wordRangeError =
+    !Number.isFinite(wordMinimum) || !Number.isFinite(wordMaximum) || wordMinimum < 1 || wordMaximum < 1
+      ? "Enter a word range using whole numbers."
+      : wordMinimum > wordMaximum
+        ? "The minimum cannot be larger than the maximum."
+        : "";
+  const canPublishTask =
+    Boolean(taskForm.rubric_id) &&
+    Boolean(assignmentForm.class_id) &&
+    Boolean(taskForm.title.trim()) &&
+    Boolean(taskForm.instruction.trim()) &&
+    !wordRangeError;
   const isPro = state.capabilities.plan_code === "SCHOOL_PRO" && state.capabilities.subscription_status === "ACTIVE";
   const markingReadyLabel = `${state.markingItems.length} ${state.markingItems.length === 1 ? "submission" : "submissions"} ready for teacher review`;
 
@@ -747,21 +823,11 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
           onRequestRelease={setReleaseTarget}
         />
 
-        <div className={`modal-backdrop ${releaseTarget ? "open" : ""}`} role="dialog" aria-modal="true" aria-labelledby="release-title">
-          <div className="modal">
-            <p className="eyebrow">Final teacher action</p>
-            <h2 className="panel-title" id="release-title" style={{ fontSize: "var(--text-xl)", marginTop: 8 }}>
-              Release this feedback to the student?
-            </h2>
-            <p className="panel-subtitle" style={{ marginTop: 12 }}>
-              The student will see only the teacher-confirmed score, final comment, and attached practice tasks.
-            </p>
-            <div className="row-actions">
-              <button className="btn btn-secondary" type="button" onClick={() => setReleaseTarget(null)}>Review again</button>
-              <button className="btn teacher-release-button" type="button" onClick={() => releaseTarget && void onReleaseFeedback(releaseTarget)}>Release now</button>
-            </div>
-          </div>
-        </div>
+        <ReleaseModal
+          open={Boolean(releaseTarget)}
+          onCancel={() => setReleaseTarget(null)}
+          onConfirm={() => releaseTarget && void onReleaseFeedback(releaseTarget)}
+        />
         <div className={`toast ${toast ? "show" : ""}`} role="status" aria-live="polite">{toast}</div>
       </AppShell>
     );
@@ -1132,201 +1198,12 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
 
       {screen === "assignments" ? (
         <>
-          <section className="lesson-flow-intro" aria-label="Create and assign flow">
+          <section className="composer-toolbar">
             <div>
-              <p className="micro-label">One connected workflow</p>
-              <h2>From teaching focus to pupil task.</h2>
-              <p>Use AI for a starting point or write your own. Nothing reaches pupils until you choose the class and publish.</p>
+              <h2 className="panel-title">Writing tasks</h2>
+              <p className="panel-subtitle">Check what pupils are working on, or start a new task.</p>
             </div>
-            <ol>
-              <li><span>1</span><strong>Draft the prompt</strong></li>
-              <li><span>2</span><strong>Shape the task</strong></li>
-              <li><span>3</span><strong>Choose class & publish</strong></li>
-            </ol>
-          </section>
-
-          <section className="generator-layout lesson-generator">
-            <form className="panel form-grid" onSubmit={(event) => event.preventDefault()}>
-              <div className="panel-header">
-                <div>
-                  <p className="micro-label">Step 1</p>
-                  <h2 className="panel-title">Draft a writing prompt</h2>
-                  <p className="panel-subtitle">Tell Pip what you want pupils to practise, then review the draft.</p>
-                </div>
-                <span className="badge-soft">{questionForm.level}</span>
-              </div>
-              <div className="grid-2">
-                <div className="field">
-                  <label htmlFor="question-level">Year level</label>
-                  <select id="question-level" className="select" value={questionForm.level} onChange={(event) => setQuestionForm({ ...questionForm, level: event.target.value })}>
-                    <option>P4</option>
-                    <option>P5</option>
-                    <option>P6</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="question-mode">Writing mode</label>
-                  <select id="question-mode" className="select" value={questionForm.mode} onChange={(event) => setQuestionForm({ ...questionForm, mode: event.target.value })}>
-                    <option>Practice Mode</option>
-                    <option>Exam Mode</option>
-                  </select>
-                </div>
-              </div>
-              <div className="field">
-                <label htmlFor="question-focus">What should pupils practise?</label>
-                <textarea id="question-focus" className="textarea" value={questionForm.focus} onChange={(event) => setQuestionForm({ ...questionForm, focus: event.target.value })} />
-              </div>
-              <div className="grid-2">
-                <div className="field">
-                  <label htmlFor="question-words">Word range</label>
-                  <input id="question-words" className="input" value={questionForm.wordRange} onChange={(event) => setQuestionForm({ ...questionForm, wordRange: event.target.value })} />
-                </div>
-                <div className="field">
-                  <label htmlFor="question-rubric">Marking rubric</label>
-                  <select id="question-rubric" className="select" value={questionForm.rubric} onChange={(event) => setQuestionForm({ ...questionForm, rubric: event.target.value })}>
-                    <option value="">Select rubric</option>
-                    {state.rubrics.map((rubric) => (
-                      <option key={rubric.id} value={rubric.id}>{rubric.title}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <button className="btn btn-primary" type="button" disabled={promptBusy || !questionForm.rubric} onClick={() => void onGeneratePromptDraft()}>
-                {promptBusy ? "Drafting prompt..." : "Ask Pip to draft"}
-              </button>
-            </form>
-
-            <article className="preview-paper lesson-prompt-preview">
-              <p className="micro-label">{promptDraft ? "Ready for your review" : "Example prompt"}</p>
-              <h2>{promptDraft?.title ?? "A Memorable School Day"}</h2>
-              <p className="panel-subtitle">
-                {promptDraft?.body ?? "Write about a memorable day at school. Describe what happened, who was there, how you felt, and why you still remember it."}
-              </p>
-              <div className="lesson-focus-list">
-                {(promptDraft?.focus ?? [
-                  "Content: clear events and feelings",
-                  "Language: accurate past tense",
-                  "Organisation: beginning, middle, and ending",
-                ]).map((item) => <span key={item}>{item}</span>)}
-              </div>
-              <div className="row-actions">
-                <button className="btn btn-secondary" type="button" onClick={() => void copyPrompt()}>Copy</button>
-                <button className="btn btn-dark" type="button" onClick={() => {
-                  const draft = promptDraft ?? {
-                    title: "A Memorable School Day",
-                    body: "Write about a memorable day at school. Describe what happened, who was there, how you felt, and why you still remember it.",
-                  };
-                  setTaskForm((current) => ({
-                    ...current,
-                    title: draft.title,
-                    instruction: draft.body,
-                    mode: questionForm.mode === "Exam Mode" ? "EXAM" : "PRACTICE",
-                    level: questionForm.level,
-                    word_minimum: questionForm.wordRange.split("-")[0] ?? current.word_minimum,
-                    word_maximum: questionForm.wordRange.split("-")[1] ?? current.word_maximum,
-                    rubric_id: questionForm.rubric || current.rubric_id,
-                  }));
-                  showToast("Prompt moved into Step 2. Review it before publishing.");
-                }}>Use this prompt</button>
-              </div>
-            </article>
-          </section>
-
-          <section className="homework-grid">
-            <form className="panel form-grid" onSubmit={(event) => { event.preventDefault(); void createTaskFromForm("PUBLISHED"); }}>
-              <div className="panel-header">
-                <div>
-                  <p className="micro-label">Steps 2 & 3</p>
-                  <h2 className="panel-title">Review and publish</h2>
-                  <p className="panel-subtitle">Edit anything you need, choose a class, then publish once.</p>
-                </div>
-                <span className="badge-soft">Teacher controlled</span>
-              </div>
-              <div className="grid-2">
-                <div className="field">
-                  <label htmlFor="task-title">Title</label>
-                  <input id="task-title" className="input" value={taskForm.title} onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })} />
-                </div>
-                <div className="field">
-                  <label htmlFor="task-rubric">Rubric</label>
-                  <select id="task-rubric" className="select" value={taskForm.rubric_id} onChange={(event) => setTaskForm({ ...taskForm, rubric_id: event.target.value })}>
-                    {state.rubrics.map((rubric) => (
-                      <option key={rubric.id} value={rubric.id}>
-                        {rubric.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="task-level">Year level</label>
-                  <select id="task-level" className="select" value={taskForm.level} onChange={(event) => {
-                    const level = event.target.value;
-                    const matchingClass = state.classes.find((schoolClass) => schoolClass.level === level);
-                    setTaskForm({ ...taskForm, level });
-                    if (matchingClass) setAssignmentForm((current) => ({ ...current, class_id: matchingClass.id }));
-                  }}>
-                    <option>P4</option>
-                    <option>P5</option>
-                    <option>P6</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="task-mode">Mode</label>
-                  <select id="task-mode" className="select" value={taskForm.mode} onChange={(event) => setTaskForm({ ...taskForm, mode: event.target.value as "PRACTICE" | "EXAM" })}>
-                    <option value="PRACTICE">Practice Mode</option>
-                    <option value="EXAM">Exam Mode</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="word-min">Minimum words</label>
-                  <input id="word-min" className="input" value={taskForm.word_minimum} onChange={(event) => setTaskForm({ ...taskForm, word_minimum: event.target.value })} />
-                </div>
-                <div className="field">
-                  <label htmlFor="word-max">Maximum words</label>
-                  <input id="word-max" className="input" value={taskForm.word_maximum} onChange={(event) => setTaskForm({ ...taskForm, word_maximum: event.target.value })} />
-                </div>
-                <div className="field">
-                  <label htmlFor="task-due">Due date</label>
-                  <input id="task-due" className="input" type="datetime-local" value={taskForm.due_at} onChange={(event) => setTaskForm({ ...taskForm, due_at: event.target.value })} />
-                </div>
-                <div className="field">
-                  <label htmlFor="assignment-class">Publish to class</label>
-                  <select id="assignment-class" className="select" value={assignmentForm.class_id} onChange={(event) => setAssignmentForm({ ...assignmentForm, class_id: event.target.value })}>
-                    {state.classes.filter((schoolClass) => schoolClass.level === taskForm.level).map((schoolClass) => (
-                      <option key={schoolClass.id} value={schoolClass.id}>{schoolClass.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              {taskForm.mode === "EXAM" ? (
-                <div className="field">
-                  <label htmlFor="exam-minutes">Exam duration minutes</label>
-                  <input id="exam-minutes" className="input" value={taskForm.exam_duration_minutes} onChange={(event) => setTaskForm({ ...taskForm, exam_duration_minutes: event.target.value })} />
-                </div>
-              ) : null}
-              <div className="field">
-                <label htmlFor="task-instruction">Writing instruction</label>
-                <textarea id="task-instruction" className="textarea" value={taskForm.instruction} onChange={(event) => setTaskForm({ ...taskForm, instruction: event.target.value })} />
-              </div>
-              <div className="row-actions" style={{ marginTop: 0 }}>
-                <button className="btn btn-primary" type="submit" disabled={!taskForm.rubric_id || !assignmentForm.class_id}>
-                  Publish to {selectedClass?.name ?? "class"}
-                </button>
-                <button type="button" className="btn btn-secondary" disabled={!taskForm.rubric_id} onClick={() => void createTaskFromForm("DRAFT")}>
-                  Save draft
-                </button>
-              </div>
-              {!taskForm.rubric_id ? <p className="empty-state">Create or activate a rubric before publishing.</p> : null}
-            </form>
-
-            <aside className="panel">
-              <div className="panel-header">
-                <div>
-                  <h2 className="panel-title">Current writing tasks</h2>
-                  <p className="panel-subtitle">Work by status instead of mixing drafts, live work, and closed tasks.</p>
-                </div>
-                <span className="badge-soft">{state.tasks.length} tasks</span>
-              </div>
+            <div className="row-actions" style={{ marginTop: 0 }}>
               <Segmented
                 value={taskFilter}
                 onChange={setTaskFilter}
@@ -1336,223 +1213,442 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
                   { value: "closed", label: "Closed" },
                 ]}
               />
-              <div className="suggestion-list" style={{ marginTop: 18 }}>
-                {filteredTasks.map((task) => (
-                  <article key={task.id} className={`task-card ${task.status === "PUBLISHED" ? "featured" : ""}`}>
-                    {task.image_url ? <img className="task-card-image" src={authenticatedMediaUrl(task.image_url) ?? undefined} alt={`Illustration for ${task.title}`} /> : null}
-                    <div className="task-meta">
-                      <span className={task.mode === "EXAM" ? "badge-warning" : "badge"}>{task.mode === "EXAM" ? "Exam" : "Practice"}</span>
-                      <span className={statusBadge(task.status)}>{task.status}</span>
-                      <span className="badge-soft">{task.assigned_classes.join(", ") || "Unassigned"}</span>
-                    </div>
-                    <h3 className="panel-title">{task.title}</h3>
-                    <p className="panel-subtitle">{task.level} - {words(task)} - {formatDate(task.due_at)}</p>
-                    <div className="row-actions" style={{ marginTop: 8 }}>
-                      {state.capabilities.features.image_generation ? (
-                        <button type="button" className="btn btn-secondary" disabled={imageBusyTaskId === task.id} onClick={() => void onGenerateTaskImage(task)}>
-                          {imageBusyTaskId === task.id ? "Drawing…" : task.image_url ? "Regenerate picture" : "Generate picture"}
-                        </button>
-                      ) : (
-                        <span className="feature-lock">◇ Prompt pictures · Pro</span>
-                      )}
-                      {task.status === "DRAFT" ? (
-                        <button type="button" className="btn btn-dark" onClick={() => void onChangeTaskStatus(task, "PUBLISHED")}>
-                          Publish
-                        </button>
-                      ) : null}
-                      {task.status === "PUBLISHED" ? (
-                        <button type="button" className="btn btn-secondary" onClick={() => void onChangeTaskStatus(task, "CLOSED")}>
-                          Close
-                        </button>
-                      ) : null}
-                      {task.status !== "ARCHIVED" ? (
-                        <button type="button" className="btn btn-secondary" onClick={() => void onChangeTaskStatus(task, "ARCHIVED")}>
-                          Archive
-                        </button>
-                      ) : null}
-                    </div>
-                  </article>
-                ))}
-                {filteredTasks.length === 0 ? <p className="empty-state">No tasks match this status.</p> : null}
-              </div>
-            </aside>
-          </section>
-
-          <details className="advanced-tools">
-            <summary>Rubric setup and advanced tools</summary>
-            <form className="form-grid" onSubmit={onCreateRubric}>
-              <div className="panel-header">
-                <div>
-                  <h2 className="panel-title">Create a school rubric</h2>
-                  <p className="panel-subtitle">Most teachers can use the approved rubric above. Open this only when the marking structure needs to change.</p>
-                </div>
-              </div>
-              <div className="grid-2">
-                <input className="input" value={rubricForm.title} onChange={(event) => setRubricForm({ ...rubricForm, title: event.target.value })} />
-                <select className="select" value={rubricForm.level} onChange={(event) => setRubricForm({ ...rubricForm, level: event.target.value })}>
-                  <option>P4</option>
-                  <option>P5</option>
-                  <option>P6</option>
-                </select>
-              </div>
-              <div className="grid-3">
-                {defaultDimensions.map((dimension) => (
-                  <div key={dimension.name} className="rubric-item">
-                    <strong>{dimension.name}</strong>
-                    <p className="panel-subtitle">0-{dimension.max_score} points</p>
-                  </div>
-                ))}
-              </div>
-              <button className="btn btn-secondary" type="submit">
-                Create rubric
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setComposerOpen((open) => !open);
+                  setPromptDraft(null);
+                  setPreviousInstruction(null);
+                }}
+              >
+                {composerOpen ? "Close composer" : "New writing task"}
               </button>
-            </form>
-          </details>
-        </>
-      ) : null}
-
-      {screen === "questions" ? (
-        <>
-          <section className="generator-layout">
-            <form className="panel form-grid" onSubmit={(event) => event.preventDefault()}>
-              <div className="panel-header">
-                <div>
-                  <h2 className="panel-title">Generation setup</h2>
-                  <p className="panel-subtitle">Question generation is bound to school rubrics and learning targets.</p>
-                </div>
-                <span className="badge-soft">{questionForm.level}</span>
-              </div>
-              <div className="grid-2">
-                <div className="field">
-                  <label htmlFor="question-level">Year level</label>
-                  <select id="question-level" className="select" value={questionForm.level} onChange={(event) => setQuestionForm({ ...questionForm, level: event.target.value })}>
-                    <option>P4</option>
-                    <option>P5</option>
-                    <option>P6</option>
-                  </select>
-                </div>
-                <div className="field">
-                  <label htmlFor="question-mode">Mode</label>
-                  <select id="question-mode" className="select" value={questionForm.mode} onChange={(event) => setQuestionForm({ ...questionForm, mode: event.target.value })}>
-                    <option>Practice Mode</option>
-                    <option>Exam Mode</option>
-                  </select>
-                </div>
-              </div>
-              <div className="field">
-                <label htmlFor="question-focus">Teaching focus</label>
-                <textarea id="question-focus" className="textarea" value={questionForm.focus} onChange={(event) => setQuestionForm({ ...questionForm, focus: event.target.value })} />
-              </div>
-              <div className="grid-2">
-                <div className="field">
-                  <label htmlFor="question-words">Word range</label>
-                  <input id="question-words" className="input" value={questionForm.wordRange} onChange={(event) => setQuestionForm({ ...questionForm, wordRange: event.target.value })} />
-                </div>
-                <div className="field">
-                  <label htmlFor="question-rubric">Rubric</label>
-                  <select id="question-rubric" className="select" value={questionForm.rubric} onChange={(event) => setQuestionForm({ ...questionForm, rubric: event.target.value })}>
-                    <option value="">Select rubric</option>
-                    {state.rubrics.map((rubric) => (
-                      <option key={rubric.id} value={rubric.id}>{rubric.title}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="row-actions" style={{ marginTop: 0 }}>
-                <button className="btn btn-primary" type="button" disabled={promptBusy || !questionForm.rubric} onClick={() => void onGeneratePromptDraft()}>
-                  {promptBusy ? "Generating..." : "Generate draft prompt"}
-                </button>
-                <button className="btn btn-secondary" type="button" onClick={() => showToast("Generation setup saved.")}>
-                  Save setup
-                </button>
-              </div>
-            </form>
-
-            <article className="preview-paper">
-              <p className="micro-label">{promptDraft ? "Generated prompt" : "Prompt preview"}</p>
-              <h2>{promptDraft?.title ?? "A Memorable School Day"}</h2>
-              <p className="panel-subtitle">
-                {promptDraft?.body ??
-                  "Write about a memorable day at school. Describe what happened, who was there, how you felt, and why you still remember it."}
-              </p>
-              <div className="grid-3" style={{ marginTop: 20 }}>
-                {(promptDraft?.focus ?? [
-                  "Content: include clear events and feelings.",
-                  "Language: use past tense accurately.",
-                  "Organisation: beginning, middle, and ending.",
-                ]).map((item) => {
-                  const [heading, detail] = item.split(": ");
-                  return (
-                    <div key={item} className="rubric-item">
-                      <strong>{heading}</strong>
-                      <p className="panel-subtitle">{detail}</p>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="row-actions">
-                <button className="btn btn-dark" type="button" onClick={() => void copyPrompt()}>
-                  Copy prompt
-                </button>
-                <button className="btn btn-primary" type="button" onClick={() => {
-                  if (promptDraft) {
-                    setTaskForm((current) => ({
-                      ...current,
-                      title: promptDraft.title,
-                      instruction: promptDraft.body,
-                      mode: questionForm.mode === "Exam Mode" ? "EXAM" : "PRACTICE",
-                      level: questionForm.level,
-                      word_minimum: questionForm.wordRange.split("-")[0] ?? current.word_minimum,
-                      word_maximum: questionForm.wordRange.split("-")[1] ?? current.word_maximum,
-                      rubric_id: questionForm.rubric || current.rubric_id,
-                    }));
-                    showToast("Prompt copied into the assignment draft.");
-                  }
-                }}>
-                  Use in assignment
-                </button>
-              </div>
-            </article>
+            </div>
           </section>
+
+          {composerOpen ? (
+            <section className="task-composer">
+              <form
+                className="panel form-grid"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setPublishConfirmOpen(true);
+                }}
+              >
+                <div className="panel-header">
+                  <div>
+                    <h2 className="panel-title">New writing task</h2>
+                    <p className="panel-subtitle">Nothing reaches pupils until you publish it to a class.</p>
+                  </div>
+                  <span className="badge-soft">{taskForm.level}</span>
+                </div>
+
+                <fieldset className="composer-group">
+                  <legend>What pupils write</legend>
+                  <div className="field">
+                    <label htmlFor="task-title">Title</label>
+                    <div className="field-with-action">
+                      <input
+                        id="task-title"
+                        className="input"
+                        value={taskForm.title}
+                        onChange={(event) => setTaskForm({ ...taskForm, title: event.target.value })}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        disabled={promptBusy}
+                        onClick={() => setAiAssistOpen((open) => !open)}
+                      >
+                        {promptBusy ? "Drafting…" : "Ask Pip to draft"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {aiAssistOpen ? (
+                    <div className="ai-assist-panel">
+                      <div className="field">
+                        <label htmlFor="teaching-focus">What should pupils practise?</label>
+                        <textarea
+                          id="teaching-focus"
+                          className="textarea"
+                          rows={2}
+                          value={teachingFocus}
+                          onChange={(event) => setTeachingFocus(event.target.value)}
+                        />
+                      </div>
+                      <p className="panel-subtitle">
+                        Pip uses the year level, mode, word range and rubric you set below.
+                      </p>
+                      <div className="row-actions" style={{ marginTop: 12 }}>
+                        <button
+                          type="button"
+                          className="btn btn-dark"
+                          disabled={promptBusy || !taskForm.rubric_id}
+                          onClick={() => void onGeneratePromptDraft()}
+                        >
+                          {promptBusy ? "Drafting…" : "Draft it"}
+                        </button>
+                        <button type="button" className="btn btn-ghost" onClick={() => setAiAssistOpen(false)}>
+                          Cancel
+                        </button>
+                      </div>
+                      {!taskForm.rubric_id ? (
+                        <p className="empty-state" style={{ marginTop: 12 }}>Choose a rubric below first.</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  <div className="field">
+                    <label htmlFor="task-instruction">Writing instruction</label>
+                    <textarea
+                      id="task-instruction"
+                      className="textarea"
+                      value={taskForm.instruction}
+                      onChange={(event) => setTaskForm({ ...taskForm, instruction: event.target.value })}
+                    />
+                  </div>
+
+                  {promptDraft && previousInstruction ? (
+                    <div className="ai-draft-note">
+                      <span className="badge-soft">Drafted by Pip</span>
+                      <div className="lesson-focus-list">
+                        {promptDraft.focus.map((item) => <span key={item}>{item}</span>)}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => {
+                          setTaskForm((current) => ({
+                            ...current,
+                            title: previousInstruction.title,
+                            instruction: previousInstruction.instruction,
+                          }));
+                          setPromptDraft(null);
+                          setPreviousInstruction(null);
+                          showToast("Reverted to your previous wording.");
+                        }}
+                      >
+                        Undo Pip’s draft
+                      </button>
+                    </div>
+                  ) : null}
+                </fieldset>
+
+                <fieldset className="composer-group">
+                  <legend>How it is marked</legend>
+                  <div className="grid-2">
+                    <div className="field">
+                      <label htmlFor="task-rubric">Rubric</label>
+                      <select
+                        id="task-rubric"
+                        className="select"
+                        value={taskForm.rubric_id}
+                        onChange={(event) => setTaskForm({ ...taskForm, rubric_id: event.target.value })}
+                      >
+                        <option value="">Select rubric</option>
+                        {state.rubrics.map((rubric) => (
+                          <option key={rubric.id} value={rubric.id}>{rubric.title}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        onClick={() => setRubricFormOpen((open) => !open)}
+                      >
+                        {rubricFormOpen ? "Cancel new rubric" : "+ New rubric"}
+                      </button>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="word-min">Word range</label>
+                      <div className="range-row">
+                        <input
+                          id="word-min"
+                          className="input"
+                          type="number"
+                          min={1}
+                          max={2000}
+                          inputMode="numeric"
+                          value={taskForm.word_minimum}
+                          onChange={(event) => setTaskForm({ ...taskForm, word_minimum: event.target.value })}
+                        />
+                        <span aria-hidden="true">–</span>
+                        <input
+                          id="word-max"
+                          className="input"
+                          type="number"
+                          min={1}
+                          max={2000}
+                          inputMode="numeric"
+                          aria-label="Maximum words"
+                          value={taskForm.word_maximum}
+                          onChange={(event) => setTaskForm({ ...taskForm, word_maximum: event.target.value })}
+                        />
+                      </div>
+                      {wordRangeError ? <p className="notice-error" style={{ marginTop: 8 }}>{wordRangeError}</p> : null}
+                    </div>
+                  </div>
+
+                  {rubricFormOpen ? (
+                    <div className="ai-assist-panel">
+                      <div className="grid-2">
+                        <div className="field">
+                          <label htmlFor="rubric-title">New rubric name</label>
+                          <input
+                            id="rubric-title"
+                            className="input"
+                            value={rubricForm.title}
+                            onChange={(event) => setRubricForm({ ...rubricForm, title: event.target.value })}
+                          />
+                        </div>
+                        <div className="field">
+                          <label htmlFor="rubric-level">Year level</label>
+                          <select
+                            id="rubric-level"
+                            className="select"
+                            value={rubricForm.level}
+                            onChange={(event) => setRubricForm({ ...rubricForm, level: event.target.value })}
+                          >
+                            <option>P4</option>
+                            <option>P5</option>
+                            <option>P6</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="grid-3">
+                        {defaultDimensions.map((dimension) => (
+                          <div key={dimension.name} className="rubric-item">
+                            <strong>{dimension.name}</strong>
+                            <p className="panel-subtitle">0-{dimension.max_score} points</p>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => {
+                          void onCreateRubricDirect();
+                        }}
+                      >
+                        Create rubric
+                      </button>
+                    </div>
+                  ) : null}
+                </fieldset>
+
+                <fieldset className="composer-group">
+                  <legend>Who and when</legend>
+                  <div className="grid-2">
+                    <div className="field">
+                      <label htmlFor="task-level">Year level</label>
+                      <select
+                        id="task-level"
+                        className="select"
+                        value={taskForm.level}
+                        onChange={(event) => {
+                          const level = event.target.value;
+                          const matchingClass = state.classes.find((schoolClass) => schoolClass.level === level);
+                          setTaskForm({ ...taskForm, level });
+                          setAssignmentForm((current) => ({ ...current, class_id: matchingClass?.id ?? "" }));
+                        }}
+                      >
+                        <option>P4</option>
+                        <option>P5</option>
+                        <option>P6</option>
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="assignment-class">Publish to class</label>
+                      <select
+                        id="assignment-class"
+                        className="select"
+                        value={assignmentForm.class_id}
+                        onChange={(event) => setAssignmentForm({ ...assignmentForm, class_id: event.target.value })}
+                      >
+                        <option value="">Select class</option>
+                        {state.classes
+                          .filter((schoolClass) => schoolClass.level === taskForm.level)
+                          .map((schoolClass) => (
+                            <option key={schoolClass.id} value={schoolClass.id}>{schoolClass.name}</option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="task-mode">Mode</label>
+                      <select
+                        id="task-mode"
+                        className="select"
+                        value={taskForm.mode}
+                        onChange={(event) => setTaskForm({ ...taskForm, mode: event.target.value as "PRACTICE" | "EXAM" })}
+                      >
+                        <option value="PRACTICE">Practice Mode</option>
+                        <option value="EXAM">Exam Mode</option>
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label htmlFor="task-due">Due date</label>
+                      <input
+                        id="task-due"
+                        className="input"
+                        type="datetime-local"
+                        value={taskForm.due_at}
+                        onChange={(event) => setTaskForm({ ...taskForm, due_at: event.target.value })}
+                      />
+                    </div>
+                    {taskForm.mode === "EXAM" ? (
+                      <div className="field">
+                        <label htmlFor="exam-minutes">Exam duration (minutes)</label>
+                        <input
+                          id="exam-minutes"
+                          className="input"
+                          type="number"
+                          min={5}
+                          max={180}
+                          inputMode="numeric"
+                          value={taskForm.exam_duration_minutes}
+                          onChange={(event) => setTaskForm({ ...taskForm, exam_duration_minutes: event.target.value })}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </fieldset>
+
+                <div className="row-actions" style={{ marginTop: 0 }}>
+                  <button
+                    className="btn btn-primary"
+                    type="submit"
+                    disabled={!canPublishTask}
+                  >
+                    Publish to {selectedClass?.name ?? "class"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={!taskForm.rubric_id || Boolean(wordRangeError)}
+                    onClick={() => void saveTaskAndClose("DRAFT")}
+                  >
+                    Save draft
+                  </button>
+                </div>
+                {!taskForm.rubric_id ? <p className="empty-state">Choose a rubric before publishing.</p> : null}
+                {taskForm.rubric_id && !assignmentForm.class_id ? (
+                  <p className="empty-state">Choose a class before publishing.</p>
+                ) : null}
+              </form>
+            </section>
+          ) : null}
 
           <section className="panel">
             <div className="panel-header">
               <div>
-                <h2 className="panel-title">Prompt library</h2>
-                <p className="panel-subtitle">Reusable prompts stop teachers from starting from a blank page every time.</p>
+                <h2 className="panel-title">Current writing tasks</h2>
+                <p className="panel-subtitle">Work by status instead of mixing drafts, live work, and closed tasks.</p>
               </div>
-              <span className="badge-soft">{state.tasks.length} reusable prompts</span>
+              <span className="badge-soft">{filteredTasks.length} of {state.tasks.length}</span>
             </div>
-            <div className="table-shell">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Prompt</th>
-                    <th>Level</th>
-                    <th>Mode</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {state.tasks.slice(0, 8).map((task) => (
-                    <tr key={task.id}>
-                      <td><strong>{task.title}</strong><br />{task.genre ?? "Writing task"}</td>
-                      <td>{task.level}</td>
-                      <td>{task.mode}</td>
-                      <td><span className={statusBadge(task.status)}>{task.status}</span></td>
-                      <td><button className="btn btn-secondary" type="button" onClick={() => setTaskForm({ ...taskForm, title: task.title, instruction: task.instruction })}>Duplicate</button></td>
-                    </tr>
-                  ))}
-                  {state.tasks.length === 0 ? (
-                    <tr>
-                      <td colSpan={5}>No reusable prompts yet.</td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
+            <div className="task-grid">
+              {filteredTasks.map((task) => (
+                <article key={task.id} className={`task-card ${task.status === "PUBLISHED" ? "featured" : ""}`}>
+                  {task.image_url ? <img className="task-card-image" src={authenticatedMediaUrl(task.image_url) ?? undefined} alt={`Illustration for ${task.title}`} /> : null}
+                  <div className="task-meta">
+                    <span className={task.mode === "EXAM" ? "badge-warning" : "badge"}>{task.mode === "EXAM" ? "Exam" : "Practice"}</span>
+                    <span className={statusBadge(task.status)}>{task.status}</span>
+                    <span className="badge-soft">{task.assigned_classes.join(", ") || "Unassigned"}</span>
+                  </div>
+                  <h3 className="panel-title">{task.title}</h3>
+                  <p className="panel-subtitle">{task.level} - {words(task)} - {formatDate(task.due_at)}</p>
+                  <div className="task-card-actions">
+                    {task.status === "DRAFT" ? (
+                      <button type="button" className="btn btn-dark" onClick={() => void onChangeTaskStatus(task, "PUBLISHED")}>
+                        Publish
+                      </button>
+                    ) : state.capabilities.features.image_generation ? (
+                      <button type="button" className="btn btn-secondary" disabled={imageBusyTaskId === task.id} onClick={() => void onGenerateTaskImage(task)}>
+                        {imageBusyTaskId === task.id ? "Drawing…" : task.image_url ? "Regenerate picture" : "Generate picture"}
+                      </button>
+                    ) : (
+                      <span className="feature-lock">◇ Prompt pictures · Pro</span>
+                    )}
+
+                    <div className="task-card-menu">
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        aria-haspopup="menu"
+                        aria-expanded={openTaskMenuId === task.id}
+                        aria-label={`More actions for ${task.title}`}
+                        onClick={() => setOpenTaskMenuId((current) => (current === task.id ? null : task.id))}
+                      >
+                        ⋯
+                      </button>
+                      {openTaskMenuId === task.id ? (
+                        <div className="task-card-menu-list" role="menu">
+                          {task.status === "PUBLISHED" && state.capabilities.features.image_generation ? (
+                            <button type="button" role="menuitem" disabled={imageBusyTaskId === task.id} onClick={() => { setOpenTaskMenuId(null); void onGenerateTaskImage(task); }}>
+                              {task.image_url ? "Regenerate picture" : "Generate picture"}
+                            </button>
+                          ) : null}
+                          {task.status === "PUBLISHED" ? (
+                            <button type="button" role="menuitem" onClick={() => { setOpenTaskMenuId(null); void onChangeTaskStatus(task, "CLOSED"); }}>
+                              Close to new submissions
+                            </button>
+                          ) : null}
+                          {task.status !== "ARCHIVED" ? (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="menu-danger"
+                              onClick={() => {
+                                setOpenTaskMenuId(null);
+                                if (window.confirm(`Archive “${task.title}”? Pupils will no longer see it.`)) {
+                                  void onChangeTaskStatus(task, "ARCHIVED");
+                                }
+                              }}
+                            >
+                              Archive
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                </article>
+              ))}
+              {filteredTasks.length === 0 ? <p className="empty-state">No tasks match this status.</p> : null}
             </div>
           </section>
+
+          <div className={`modal-backdrop ${publishConfirmOpen ? "open" : ""}`} role="dialog" aria-modal="true" aria-labelledby="publish-title">
+            <div className="modal">
+              <p className="eyebrow">Before pupils see it</p>
+              <h2 className="panel-title" id="publish-title" style={{ fontSize: "var(--text-xl)", marginTop: 8 }}>
+                Publish this task to {selectedClass?.name ?? "the class"}?
+              </h2>
+              <dl className="publish-summary">
+                <div><dt>Task</dt><dd>{taskForm.title || "Untitled"}</dd></div>
+                <div><dt>Class</dt><dd>{selectedClass?.name ?? "—"}</dd></div>
+                <div><dt>Mode</dt><dd>{taskForm.mode === "EXAM" ? `Exam · ${taskForm.exam_duration_minutes || 30} min` : "Practice"}</dd></div>
+                <div><dt>Words</dt><dd>{taskForm.word_minimum}–{taskForm.word_maximum}</dd></div>
+                <div><dt>Due</dt><dd>{taskForm.due_at ? new Date(taskForm.due_at).toLocaleString() : "No due date"}</dd></div>
+              </dl>
+              <div className="row-actions">
+                <button className="btn btn-secondary" type="button" onClick={() => setPublishConfirmOpen(false)}>
+                  Keep editing
+                </button>
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  onClick={() => {
+                    setPublishConfirmOpen(false);
+                    void saveTaskAndClose("PUBLISHED");
+                  }}
+                >
+                  Publish now
+                </button>
+              </div>
+            </div>
+          </div>
         </>
       ) : null}
 
@@ -1853,25 +1949,11 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
         </div>
       ) : null}
 
-      <div className={`modal-backdrop ${releaseTarget ? "open" : ""}`} role="dialog" aria-modal="true" aria-labelledby="release-title">
-        <div className="modal">
-          <p className="eyebrow">Final teacher action</p>
-          <h2 className="panel-title" id="release-title" style={{ fontSize: "var(--text-xl)", marginTop: 8 }}>
-            Release this feedback to the student?
-          </h2>
-          <p className="panel-subtitle" style={{ marginTop: 12 }}>
-            The student will see only the teacher-confirmed score, final comment, and attached practice tasks.
-          </p>
-          <div className="row-actions">
-            <button className="btn btn-secondary" type="button" onClick={() => setReleaseTarget(null)}>
-              Review again
-            </button>
-            <button className="btn btn-primary" type="button" onClick={() => releaseTarget && void onReleaseFeedback(releaseTarget)}>
-              Release now
-            </button>
-          </div>
-        </div>
-      </div>
+      <ReleaseModal
+        open={Boolean(releaseTarget)}
+        onCancel={() => setReleaseTarget(null)}
+        onConfirm={() => releaseTarget && void onReleaseFeedback(releaseTarget)}
+      />
       <div className={`toast ${toast ? "show" : ""}`} role="status" aria-live="polite">{toast}</div>
     </AppShell>
   );
