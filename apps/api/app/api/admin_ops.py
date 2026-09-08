@@ -205,7 +205,7 @@ async def test_admin_ai_settings(
         response = await adapter.generate_json(
             LLMGenerationRequest(
                 response_schema_name="connection_test",
-                max_tokens=120,
+                max_tokens=300,
                 messages=[
                     LLMMessage(
                         role="system",

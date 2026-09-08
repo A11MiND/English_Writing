@@ -150,7 +150,7 @@ async def generate_personal_practice(
             LLMGenerationRequest(
                 response_schema_name="personal_practice",
                 temperature=0.5,
-                max_tokens=700,
+                max_tokens=2000,
                 messages=[
                     LLMMessage(
                         role="system",
@@ -395,7 +395,7 @@ async def rewrite_student_text(
             LLMGenerationRequest(
                 response_schema_name="student_rewrite",
                 temperature=0.35,
-                max_tokens=500,
+                max_tokens=1500,
                 messages=[
                     LLMMessage(
                         role="system",

@@ -193,7 +193,7 @@ async def analyse_paragraph_with_cache(
             LLMGenerationRequest(
                 response_schema_name="paragraph_coach",
                 temperature=0.2,
-                max_tokens=650,
+                max_tokens=1500,
                 messages=paragraph_coach_messages(text),
             )
         )

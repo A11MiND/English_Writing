@@ -664,7 +664,7 @@ async def generate_teacher_question(
             LLMGenerationRequest(
                 response_schema_name="prompt_generation",
                 temperature=0.4,
-                max_tokens=900,
+                max_tokens=2000,
                 messages=[
                     LLMMessage(
                         role="system",
