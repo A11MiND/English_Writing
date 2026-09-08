@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { ProductTopNav, studentNavigation, type AppShellUser } from "@/components/app-shell";
 import { MascotGuide } from "@/components/student-mascot";
 import { currentUser, logout } from "@/lib/auth";
-import { generatePersonalPractice, listPersonalPractice } from "@/lib/school-data";
+import { generatePersonalPractice, listPersonalPractice, startFreeWriting } from "@/lib/school-data";
 import { SkeletonScreen } from "@/components/skeleton";
 
 const focusOptions: Array<{
@@ -48,6 +48,11 @@ function practiceAction(item: PersonalPracticeTask) {
   return "See marking progress";
 }
 
+function wordRangeLabel(item: Pick<PersonalPracticeTask, "word_minimum" | "word_maximum">) {
+  if (item.word_minimum == null && item.word_maximum == null) return "No word limit";
+  return `${item.word_minimum ?? "-"}-${item.word_maximum ?? "-"} words`;
+}
+
 export function StudentPractice() {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [focus, setFocus] = useState<PersonalPracticeFocus>("STRONGER_FEELINGS");
@@ -55,6 +60,7 @@ export function StudentPractice() {
   const [duration, setDuration] = useState<10 | 15 | 20>(15);
   const [generated, setGenerated] = useState<PersonalPracticeTask | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [startingFreeWrite, setStartingFreeWrite] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -105,6 +111,18 @@ export function StudentPractice() {
     }
   }
 
+  async function onStartFreeWriting() {
+    setStartingFreeWrite(true);
+    setError("");
+    try {
+      const practice = await startFreeWriting();
+      window.location.href = `/student/tasks/${practice.id}/practice`;
+    } catch (startError) {
+      setError(startError instanceof Error ? startError.message : "Unable to open a blank page right now.");
+      setStartingFreeWrite(false);
+    }
+  }
+
   async function onLogout() {
     await logout();
     window.location.href = "/login";
@@ -133,6 +151,21 @@ export function StudentPractice() {
             body="Pick one focus, one writing type, and the time you have. There are no streaks or leaderboards here—just useful practice."
             variant="compact"
           />
+        </section>
+
+        <section className="practice-freewrite" aria-label="Write freely without a prompt">
+          <div>
+            <strong>Just want to write?</strong>
+            <span> Open a blank page with no topic, no word count, and no timer. Grammar checks and AI suggestions still work as you write.</span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary practice-freewrite-button"
+            onClick={() => void onStartFreeWriting()}
+            disabled={startingFreeWrite}
+          >
+            {startingFreeWrite ? "Opening…" : "Start writing freely"}
+          </button>
         </section>
 
         <section className="practice-builder" aria-label="Build a personal practice">
@@ -206,7 +239,7 @@ export function StudentPractice() {
             <div className="generated-practice-badge">Your new challenge</div>
             <div className="generated-practice-main">
               <div>
-                <p className="micro-label">{generated.practice_focus} · {generated.word_minimum}-{generated.word_maximum} words</p>
+                <p className="micro-label">{generated.practice_focus} · {wordRangeLabel(generated)}</p>
                 <h2>{generated.title}</h2>
                 <p>{generated.instruction}</p>
               </div>
@@ -230,7 +263,7 @@ export function StudentPractice() {
               <article key={item.id}>
                 <div className="practice-history-icon" aria-hidden="true">✎</div>
                 <div className="practice-history-copy">
-                  <div className="task-meta"><span className="badge">{item.practice_focus}</span><span>{item.word_minimum}-{item.word_maximum} words</span></div>
+                  <div className="task-meta"><span className="badge">{item.practice_focus}</span><span>{wordRangeLabel(item)}</span></div>
                   <h3>{item.title}</h3>
                   <p>{item.submission_id ? `Submitted ${item.submitted_at ? new Date(item.submitted_at).toLocaleDateString() : ""}` : item.draft_saved_at ? "Draft saved" : "Ready to start"}</p>
                 </div>

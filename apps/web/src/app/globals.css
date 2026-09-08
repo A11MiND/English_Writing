@@ -5392,6 +5392,33 @@ img.brand-mark {
   max-width: 700px;
 }
 
+.practice-freewrite {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+  border: 1px dashed var(--border);
+  border-radius: 18px;
+  background: var(--surface-warm);
+  padding: 18px 22px;
+}
+
+.practice-freewrite strong {
+  color: var(--fg);
+}
+
+.practice-freewrite span {
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+}
+
+.practice-freewrite-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .practice-builder {
   overflow: hidden;
   border: 1px solid var(--border);

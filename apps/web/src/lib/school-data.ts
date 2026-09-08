@@ -566,6 +566,17 @@ export async function generatePersonalPractice(payload: {
   return body.data.practice;
 }
 
+export async function startFreeWriting(): Promise<PersonalPracticeTask> {
+  const response = await fetch(`${apiBaseUrl}/api/student/practice/blank`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+  });
+  const body = await parseApiResponse<{ practice: PersonalPracticeTask }>(response);
+  if (!body.success) throw new Error(body.message);
+  return body.data.practice;
+}
+
 export async function listPersonalPractice(): Promise<PersonalPracticeTask[]> {
   const response = await fetch(`${apiBaseUrl}/api/student/practice`, {
     credentials: "include",

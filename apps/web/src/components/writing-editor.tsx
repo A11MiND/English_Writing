@@ -787,6 +787,7 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
     );
   }
 
+  const hasWordTarget = task.word_minimum != null || task.word_maximum != null;
   const minimumWords = task.word_minimum ?? 120;
   const maximumWords = task.word_maximum ?? 180;
   const goalProgress = Math.min(100, Math.round((wordCount / Math.max(1, minimumWords)) * 100));
@@ -806,7 +807,7 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
 
         <ol className="writing-steps" aria-label="Writing progress">
           {(["Draft", "Polish", "Share"] as const).map((label, index) => {
-            const stage = locked ? 2 : wordCount >= minimumWords ? 1 : 0;
+            const stage = locked ? 2 : (hasWordTarget ? wordCount >= minimumWords : wordCount > 0) ? 1 : 0;
             return (
               <li
                 key={label}
@@ -834,7 +835,7 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
           <div>{task.instruction}</div>
           <ReadAloudButton taskId={task.id} text={task.instruction} context="PROMPT" label="Listen to the prompt" />
         </div>
-        <span className="story-word-target">{minimumWords}-{maximumWords} words</span>
+        <span className="story-word-target">{hasWordTarget ? `${minimumWords}-${maximumWords} words` : "No word limit"}</span>
       </section>
 
       <section className="story-workspace">
@@ -844,7 +845,7 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
               <p>Practice draft</p>
               <h2>My first draft</h2>
             </div>
-            <span>{wordCount} of {minimumWords}-{maximumWords} words</span>
+            <span>{hasWordTarget ? `${wordCount} of ${minimumWords}-${maximumWords} words` : `${wordCount} words written`}</span>
           </div>
 
           <div className="story-editor-frame" data-testid="editor-content">
@@ -877,13 +878,22 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
 
         <aside className="story-coach-rail" aria-label="Writing support">
           <section className="story-goal-card">
-            <div>
-              <p>Today&apos;s writing goal</p>
-              <strong>{wordCount} / {minimumWords} words</strong>
-            </div>
-            <div className="story-progress" role="progressbar" aria-valuemin={0} aria-valuemax={minimumWords} aria-valuenow={wordCount}>
-              <span style={{ width: `${goalProgress}%` }} />
-            </div>
+            {hasWordTarget ? (
+              <>
+                <div>
+                  <p>Today&apos;s writing goal</p>
+                  <strong>{wordCount} / {minimumWords} words</strong>
+                </div>
+                <div className="story-progress" role="progressbar" aria-valuemin={0} aria-valuemax={minimumWords} aria-valuenow={wordCount}>
+                  <span style={{ width: `${goalProgress}%` }} />
+                </div>
+              </>
+            ) : (
+              <div>
+                <p>Free writing</p>
+                <strong>{wordCount} {wordCount === 1 ? "word" : "words"} so far</strong>
+              </div>
+            )}
           </section>
 
           {!polishOpen ? <section className="story-coach-card">

@@ -13,7 +13,7 @@ from app.api.writing import student_task_context
 from app.core.auth import Role, require_roles, write_audit_log
 from app.core.database import get_session
 from app.core.responses import ApiException, ErrorCode, success_response
-from app.models import AIUsageLog, MarkingResult, Rubric, StudentProfile, Submission, User, WritingTask
+from app.models import AIUsageLog, MarkingResult, Rubric, StudentProfile, Submission, User, WritingTask, utc_now
 from app.services.ai_settings import get_school_llm_adapter
 from app.services.llm import LLMError, LLMGenerationRequest, LLMMessage
 
@@ -243,6 +243,62 @@ async def generate_personal_practice(
             "structure": [str(step)[:120] for step in structure],
         }
     )
+    return success_response(request, {"practice": task_payload})
+
+
+@router.post("/student/practice/blank", status_code=201)
+async def start_free_writing(
+    request: Request,
+    user: Annotated[User, Depends(require_roles(Role.STUDENT))],
+    db: Annotated[AsyncSession, Depends(get_session)],
+) -> dict:
+    """Open a blank writing canvas with no AI-generated prompt and no word limit.
+
+    Skips the LLM call entirely - pupils asked for a way to write freely
+    without waiting on (or being shaped by) an AI-designed topic first.
+    Still needs a rubric on file so the usual submit/AI-marking path keeps
+    working if the pupil chooses to submit what they wrote.
+    """
+    profile = await student_profile_or_404(db, user)
+    rubric_result = await db.execute(
+        select(Rubric)
+        .where(
+            Rubric.school_id == user.school_id,
+            Rubric.level == profile.level,
+            Rubric.status == "ACTIVE",
+        )
+        .order_by(Rubric.created_at.asc())
+    )
+    rubric = rubric_result.scalars().first()
+    if rubric is None:
+        raise ApiException(
+            ErrorCode.NOT_FOUND,
+            f"No active {profile.level} rubric is available for personal practice.",
+            404,
+        )
+
+    task = WritingTask(
+        school_id=user.school_id,
+        title=f"Free Writing – {utc_now().strftime('%-d %b')}",
+        level=profile.level,
+        instruction=(
+            "Write about anything you like. There is no fixed topic, word count or time limit - "
+            "just start writing, and Pip will help with grammar and suggestions as you go."
+        ),
+        genre="Free Writing|FREE_WRITE",
+        mode="PRACTICE",
+        word_minimum=None,
+        word_maximum=None,
+        rubric_id=rubric.id,
+        created_by=user.id,
+        status="PUBLISHED",
+    )
+    db.add(task)
+    await write_audit_log(db, request, "FREE_WRITING_STARTED", user, {})
+    await db.commit()
+    await db.refresh(task)
+    task_payload = serialize_task(task, ["My Practice"])
+    task_payload.update({"personal_practice": True, "practice_focus": "Free writing", "structure": []})
     return success_response(request, {"practice": task_payload})
 
 
