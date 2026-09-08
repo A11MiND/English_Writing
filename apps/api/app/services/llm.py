@@ -342,6 +342,9 @@ def build_ai_marking_messages(
         f"Score exactly these rubric dimensions, using these names verbatim: {', '.join(names)}. "
         "Give one dimension_scores entry per dimension and no others. "
         "The total_score must equal the sum of every dimension score. "
+        "For sentence_level_comments, set category to whichever of these names the comment is "
+        "mainly about, in upper case; use MECHANICS for spelling/punctuation and OTHER only when "
+        "no dimension applies. "
         f"The JSON must validate against this schema: {schema} "
         f"Example output shape: {example}"
     )

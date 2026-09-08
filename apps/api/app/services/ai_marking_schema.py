@@ -10,7 +10,11 @@ class SentenceLevelComment(BaseModel):
 
     sentence: str = Field(min_length=1)
     comment: str = Field(min_length=1)
-    category: Literal["CONTENT", "LANGUAGE", "ORGANISATION", "MECHANICS", "OTHER"]
+    # A rubric's dimension names are school-defined (see DimensionScore), so this
+    # can't stay a fixed Literal - it used to reject a real "VOCABULARY" comment
+    # the moment a school added a Vocabulary dimension. MECHANICS/OTHER remain as
+    # fallbacks for issues outside any rubric dimension (e.g. spelling, punctuation).
+    category: str = Field(min_length=1, max_length=32)
 
 
 class RecommendedExercise(BaseModel):
