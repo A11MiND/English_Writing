@@ -8,6 +8,7 @@ import pytest
 from app.core.config import Settings
 from app.services.llm import (
     LLMConfigurationError,
+    LLMError,
     LLMGenerationRequest,
     LLMMessage,
     LLMResponseValidationError,
@@ -123,6 +124,30 @@ async def test_openai_compatible_adapter_rejects_invalid_ai_json() -> None:
         )
 
         with pytest.raises(LLMResponseValidationError):
+            await adapter.generate_json(
+                LLMGenerationRequest(messages=[LLMMessage(role="user", content="Mark this writing.")])
+            )
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_adapter_converts_timeout_to_llm_error() -> None:
+    async def handler(_: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out", request=None)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        adapter = OpenAICompatibleLLMAdapter(
+            provider="minimax",
+            model="MiniMax-M3",
+            base_url="https://example.test",
+            api_key="test-key",
+            timeout_seconds=1,
+            client=client,
+        )
+
+        # A raw httpx timeout must not escape as an unhandled exception: the
+        # marking worker only retries/records failures caught as LLMError.
+        with pytest.raises(LLMError):
             await adapter.generate_json(
                 LLMGenerationRequest(messages=[LLMMessage(role="user", content="Mark this writing.")])
             )

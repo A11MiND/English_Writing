@@ -180,11 +180,22 @@ class OpenAICompatibleLLMAdapter:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        if self.client is not None:
-            response = await self.client.post(url, json=payload, headers=headers)
-        else:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-                response = await client.post(url, json=payload, headers=headers)
+        try:
+            if self.client is not None:
+                response = await self.client.post(url, json=payload, headers=headers)
+            else:
+                async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                    response = await client.post(url, json=payload, headers=headers)
+        except httpx.TimeoutException as exc:
+            # Reasoning models (MiniMax-M3, DeepSeek-R1, ...) can run well past a
+            # timeout tuned for a non-reasoning model; surface this as a retryable
+            # LLMError like every other provider failure rather than an unhandled
+            # httpx exception that would otherwise crash the marking worker's loop.
+            raise LLMProviderError(
+                f"{self.provider} did not respond within {self.timeout_seconds}s"
+            ) from exc
+        except httpx.HTTPError as exc:
+            raise LLMProviderError(f"{self.provider} request failed: {exc}") from exc
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
