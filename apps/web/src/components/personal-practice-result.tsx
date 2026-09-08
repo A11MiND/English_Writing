@@ -16,6 +16,8 @@ type ResultState =
   | { status: "error"; message: string }
   | { status: "ready"; result: PersonalPracticeResult };
 
+const scoreCardTones = ["sage", "lavender", "gold", "coral"];
+
 export function PersonalPracticeResultPage({ taskId }: { taskId: string }) {
   const [state, setState] = useState<ResultState>({ status: "loading" });
 
@@ -90,17 +92,19 @@ export function PersonalPracticeResultPage({ taskId }: { taskId: string }) {
         ) : marking?.status === "AI_MARKED" ? (
           <>
             <section className="practice-score-grid">
-              {[
-                ["Content", marking.content_score, marking.content_feedback, "sage"],
-                ["Language", marking.language_score, marking.language_feedback, "lavender"],
-                ["Organisation", marking.organisation_score, marking.organisation_feedback, "gold"],
-              ].map(([label, score, feedback, tone]) => (
-                <article className={`practice-score-card ${tone}`} key={String(label)}>
+              {marking.dimension_scores.map((dimension, index) => (
+                <article
+                  className={`practice-score-card ${scoreCardTones[index % scoreCardTones.length]}`}
+                  key={dimension.name}
+                >
                   <div>
-                    <span>{label}</span>
-                    <strong>{score as number}<small>/{scoreMaximum(String(label)) ?? "-"}</small></strong>
+                    <span>{dimension.name}</span>
+                    <strong>
+                      {dimension.score ?? "-"}
+                      <small>/{dimension.max_score ?? scoreMaximum(dimension.name) ?? "-"}</small>
+                    </strong>
                   </div>
-                  <p>{feedback as string}</p>
+                  <p>{dimension.feedback}</p>
                 </article>
               ))}
             </section>

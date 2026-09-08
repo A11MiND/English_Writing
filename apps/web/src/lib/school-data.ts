@@ -768,9 +768,7 @@ export async function runMarking(markingResultId: string): Promise<MarkingResult
 export async function reviewMarking(
   markingResultId: string,
   payload: {
-    content_score: number;
-    language_score: number;
-    organisation_score: number;
+    dimension_scores: Array<{ name: string; score: number }>;
     total_score: number;
     review_notes?: string;
     status?: "DRAFT" | "REVIEWED" | "RELEASE_READY";

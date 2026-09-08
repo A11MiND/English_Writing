@@ -4,9 +4,7 @@ import type { MarkingResult, TeacherMarkingSubmission } from "@english-ai-writin
 import { useState } from "react";
 
 type ReviewDraft = {
-  content: string;
-  language: string;
-  organisation: string;
+  scores: Record<string, string>;
   notes: string;
 };
 
@@ -24,11 +22,7 @@ type TeacherReviewDeskProps = {
   onRequestRelease: (markingResultId: string) => void;
 };
 
-const rubricRows = [
-  { key: "content", label: "Content", note: "Ideas, detail and relevance", tone: "sage" },
-  { key: "language", label: "Language", note: "Word choice, grammar and sentences", tone: "lavender" },
-  { key: "organisation", label: "Organisation", note: "Beginning, sequence and ending", tone: "gold" },
-] as const;
+const rubricTones = ["sage", "lavender", "gold", "coral"] as const;
 
 function sentenceRows(content: string) {
   return (content.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [content])
@@ -41,21 +35,8 @@ function queueLabel(item: TeacherMarkingSubmission, index: number) {
   return `${item.class_name} · Student ${String(index + 1).padStart(2, "0")}`;
 }
 
-function scoreValue(result: MarkingResult | null, key: (typeof rubricRows)[number]["key"]) {
-  if (!result) return null;
-  if (key === "content") return result.content_score;
-  if (key === "language") return result.language_score;
-  return result.organisation_score;
-}
-
-function scoreMaximum(
-  item: TeacherMarkingSubmission | undefined,
-  key: (typeof rubricRows)[number]["key"],
-) {
-  const label = rubricRows.find((row) => row.key === key)?.label;
-  return item?.task.rubric.dimensions.find(
-    (dimension) => dimension.name.toLowerCase() === label?.toLowerCase(),
-  )?.max_score;
+function aiScoreFor(result: MarkingResult | null, name: string) {
+  return result?.dimension_scores.find((entry) => entry.name === name)?.score ?? null;
 }
 
 export function TeacherReviewDesk({
@@ -152,21 +133,30 @@ export function TeacherReviewDesk({
               </div>
 
               <div className="teacher-rubric-row" aria-label="Teacher rubric scores">
-                {rubricRows.map((row) => {
-                  const value = selectedDraft?.[row.key] ?? String(scoreValue(selectedResult, row.key) ?? "");
-                  const maximum = scoreMaximum(selectedItem, row.key);
+                {(selectedItem?.task.rubric.dimensions ?? []).map((dimension, index) => {
+                  const value =
+                    selectedDraft?.scores[dimension.name]
+                    ?? String(aiScoreFor(selectedResult, dimension.name) ?? "");
                   return (
-                    <label key={row.key} className={`teacher-rubric-card teacher-rubric-${row.tone}`}>
-                      <span>{row.label}</span>
-                      <small>{row.note}</small>
+                    <label
+                      key={dimension.id}
+                      className={`teacher-rubric-card teacher-rubric-${rubricTones[index % rubricTones.length]}`}
+                    >
+                      <span>{dimension.name}</span>
+                      <small>{dimension.descriptor}</small>
                       <span className="teacher-score-input">
                         <input
-                          inputMode="decimal"
-                          aria-label={`${row.label} score`}
+                          inputMode="numeric"
+                          aria-label={`${dimension.name} score`}
                           value={value}
-                          onChange={(event) => selectedResult && onUpdateDraft(selectedResult.id, { [row.key]: event.target.value })}
+                          onChange={(event) =>
+                            selectedResult
+                            && onUpdateDraft(selectedResult.id, {
+                              scores: { ...(selectedDraft?.scores ?? {}), [dimension.name]: event.target.value },
+                            })
+                          }
                         />
-                        <span>/ {maximum ?? "-"}</span>
+                        <span>/ {dimension.max_score}</span>
                       </span>
                     </label>
                   );
@@ -188,7 +178,7 @@ export function TeacherReviewDesk({
               {totalScore ?? "-"} <span>/ {selectedItem?.task.rubric.total_score ?? "-"}</span>
             </div>
             <p>
-              {selectedResult?.language_feedback
+              {selectedResult?.dimension_scores.find((entry) => entry.feedback)?.feedback
                 ?? "Review the evidence and rubric before releasing anything to the student."}
             </p>
             {selectedResult && selectedResult.status !== "AI_MARKED" ? (
@@ -201,7 +191,10 @@ export function TeacherReviewDesk({
             <textarea
               value={selectedDraft?.notes ?? ""}
               onChange={(event) => selectedResult && onUpdateDraft(selectedResult.id, { notes: event.target.value })}
-              placeholder={selectedResult?.content_feedback ?? "Write the final comment the student will see."}
+              placeholder={
+                selectedResult?.dimension_scores[0]?.feedback
+                ?? "Write the final comment the student will see."
+              }
               aria-label="Teacher final comment"
             />
             <button

@@ -278,13 +278,8 @@ export type PersonalPracticeTask = WritingTask & {
 export type PersonalPracticeMarking = {
   id: string;
   status: MarkingStatus;
-  content_score: number | null;
-  language_score: number | null;
-  organisation_score: number | null;
+  dimension_scores: DimensionScore[];
   total_score: number | null;
-  content_feedback: string | null;
-  language_feedback: string | null;
-  organisation_feedback: string | null;
   strengths: string[];
   weaknesses: string[];
   sentence_level_comments: AiMarkingOutput["sentence_level_comments"];
@@ -410,15 +405,18 @@ export type LlmProvider = (typeof llmProviders)[number];
 
 export type LlmConfidenceLevel = "LOW" | "MEDIUM" | "HIGH";
 
+/** One score per rubric dimension, so a school can name and weight its own. */
+export type DimensionScore = {
+  name: string;
+  score: number | null;
+  max_score: number | null;
+  feedback?: string | null;
+};
+
 export type AiMarkingOutput = {
-  content_score: number;
-  language_score: number;
-  organisation_score: number;
+  dimension_scores: DimensionScore[];
   total_score: number;
   confidence_level: LlmConfidenceLevel;
-  content_feedback: string;
-  language_feedback: string;
-  organisation_feedback: string;
   strengths: string[];
   weaknesses: string[];
   sentence_level_comments: Array<{
@@ -440,28 +438,16 @@ export type MarkingStatus = "QUEUED" | "PROCESSING" | "AI_MARKED" | "AI_MARKING_
 
 export type MarkingResult = Omit<
   AiMarkingOutput,
-  | "content_score"
-  | "language_score"
-  | "organisation_score"
-  | "total_score"
-  | "confidence_level"
-  | "content_feedback"
-  | "language_feedback"
-  | "organisation_feedback"
+  "dimension_scores" | "total_score" | "confidence_level"
 > & {
   id: string;
   submission_id: string;
   task_id: string;
   student_id: string;
   status: MarkingStatus;
-  content_score: number | null;
-  language_score: number | null;
-  organisation_score: number | null;
+  dimension_scores: DimensionScore[];
   total_score: number | null;
   confidence_level: LlmConfidenceLevel | null;
-  content_feedback: string | null;
-  language_feedback: string | null;
-  organisation_feedback: string | null;
   attempts: number;
   last_error: string | null;
   queued_at: string;
@@ -474,13 +460,8 @@ export type ReleasedStudentMarking = {
   task_id: string;
   student_id: string;
   status: MarkingStatus;
-  content_score: number | null;
-  language_score: number | null;
-  organisation_score: number | null;
+  dimension_scores: DimensionScore[];
   total_score: number | null;
-  content_feedback: string | null;
-  language_feedback: string | null;
-  organisation_feedback: string | null;
   strengths: string[];
   weaknesses: string[];
   sentence_level_comments: AiMarkingOutput["sentence_level_comments"];
@@ -522,9 +503,7 @@ export type TeacherReview = {
   id: string;
   marking_result_id: string;
   submission_id: string;
-  content_score: number | null;
-  language_score: number | null;
-  organisation_score: number | null;
+  dimension_scores: DimensionScore[];
   total_score: number | null;
   review_notes: string | null;
   status: "DRAFT" | "REVIEWED" | "RELEASE_READY" | "RELEASED";
@@ -587,17 +566,12 @@ export type ClassReportPayload = {
     status: "LIVE_PREVIEW" | "READY" | string;
   };
   summary: ClassReportSummary;
-  rubric_breakdown: {
-    content_average: number | null;
-    content_average_percentage: number | null;
-    content_max_score: number | null;
-    language_average: number | null;
-    language_average_percentage: number | null;
-    language_max_score: number | null;
-    organisation_average: number | null;
-    organisation_average_percentage: number | null;
-    organisation_max_score: number | null;
-  };
+  rubric_breakdown: Array<{
+    name: string;
+    average: number | null;
+    average_percentage: number | null;
+    max_score: number | null;
+  }>;
   score_distribution: Record<string, number>;
   common_weaknesses: Array<{
     weakness: string;
@@ -613,13 +587,8 @@ export type ClassReportPayload = {
     submitted: boolean;
     submitted_at: string | null;
     word_count: number | null;
-    content_score: number | null;
-    language_score: number | null;
-    organisation_score: number | null;
+    dimension_scores: DimensionScore[];
     total_score: number | null;
-    content_max_score: number;
-    language_max_score: number;
-    organisation_max_score: number;
     total_max_score: number;
     rubric_id: string;
     rubric_title: string;

@@ -18,33 +18,21 @@ from app.services.llm import (
 
 MAX_MARKING_ATTEMPTS = 3
 
-RUBRIC_SCORE_FIELDS = {
-    "content_score": "Content",
-    "language_score": "Language",
-    "organisation_score": "Organisation",
-}
-
-
-def rubric_score_limits(dimensions: list[Any]) -> dict[str, dict[str, int | str]]:
-    """Return the score bounds used by the persisted three-dimension result model."""
-    dimensions_by_name = {
-        str(dimension.name).strip().casefold(): dimension for dimension in dimensions
-    }
-    limits: dict[str, dict[str, int | str]] = {}
-    for score_field, dimension_name in RUBRIC_SCORE_FIELDS.items():
-        dimension = dimensions_by_name.get(dimension_name.casefold())
-        if dimension is None:
-            raise ValueError(f"Rubric is missing the required {dimension_name} dimension.")
-        limits[score_field] = {
-            "name": dimension_name,
+def rubric_score_limits(dimensions: list[Any]) -> dict[str, dict[str, int]]:
+    """Score bounds for every dimension the school put on this rubric, keyed by name."""
+    limits: dict[str, dict[str, int]] = {}
+    for dimension in sorted(dimensions, key=lambda item: item.sort_order):
+        limits[str(dimension.name).strip()] = {
             "min_score": int(dimension.min_score),
             "max_score": int(dimension.max_score),
         }
+    if not limits:
+        raise ValueError("Rubric has no dimensions to mark against.")
     return limits
 
 
-def rubric_total_score(limits: dict[str, dict[str, int | str]]) -> int:
-    return sum(int(limit["max_score"]) for limit in limits.values())
+def rubric_total_score(limits: dict[str, dict[str, int]]) -> int:
+    return sum(limit["max_score"] for limit in limits.values())
 
 
 def normalize_ai_marking_payload(
@@ -53,37 +41,51 @@ def normalize_ai_marking_payload(
     """Clamp provider scores to the task rubric and make the total authoritative."""
     normalized = dict(payload)
     limits = rubric_score_limits(dimensions)
+    by_name = {name.casefold(): name for name in limits}
     changes: dict[str, dict[str, int]] = {}
-    for score_field, limit in limits.items():
-        original = int(normalized[score_field])
-        bounded = max(
-            int(limit["min_score"]),
-            min(int(limit["max_score"]), original),
-        )
-        normalized[score_field] = bounded
-        if bounded != original:
-            changes[score_field] = {"provider": original, "normalized": bounded}
 
-    provider_total = int(normalized["total_score"])
-    calculated_total = sum(int(normalized[field]) for field in RUBRIC_SCORE_FIELDS)
+    provided = {
+        str(entry.get("name", "")).strip().casefold(): entry
+        for entry in (normalized.get("dimension_scores") or [])
+    }
+    missing = [name for name in limits if name.casefold() not in provided]
+    if missing:
+        raise ValueError(f"AI marking did not score: {', '.join(missing)}.")
+
+    scored: list[dict[str, Any]] = []
+    for canonical_name, limit in limits.items():
+        entry = provided[canonical_name.casefold()]
+        original = int(entry.get("score", 0))
+        bounded = max(limit["min_score"], min(limit["max_score"], original))
+        if bounded != original:
+            changes[canonical_name] = {"provider": original, "normalized": bounded}
+        scored.append(
+            {
+                "name": canonical_name,
+                "score": bounded,
+                "max_score": limit["max_score"],
+                "feedback": str(entry.get("feedback", "")).strip(),
+            }
+        )
+
+    # Anything the provider scored that the rubric does not define is dropped rather
+    # than persisted, so a rubric edit cannot leave orphan scores behind.
+    extra = [by_name.get(key, key) for key in provided if key not in {n.casefold() for n in limits}]
+
+    normalized["dimension_scores"] = scored
+    provider_total = int(normalized.get("total_score", 0))
+    calculated_total = sum(int(item["score"]) for item in scored)
     normalized["total_score"] = calculated_total
     if provider_total != calculated_total:
-        changes["total_score"] = {
-            "provider": provider_total,
-            "normalized": calculated_total,
-        }
+        changes["total_score"] = {"provider": provider_total, "normalized": calculated_total}
 
     metadata = dict(normalized.get("model_metadata") or {})
-    metadata["rubric_score_scale"] = {
-        field: {
-            "min_score": int(limit["min_score"]),
-            "max_score": int(limit["max_score"]),
-        }
-        for field, limit in limits.items()
-    }
+    metadata["rubric_score_scale"] = {name: dict(limit) for name, limit in limits.items()}
     metadata["rubric_total_score"] = rubric_total_score(limits)
     if changes:
         metadata["score_normalization"] = changes
+    if extra:
+        metadata["ignored_dimensions"] = extra
     normalized["model_metadata"] = metadata
     return normalized
 
@@ -97,14 +99,9 @@ def serialize_marking_result(row: MarkingResult | None) -> dict | None:
         "task_id": row.task_id,
         "student_id": row.student_id,
         "status": row.status,
-        "content_score": row.content_score,
-        "language_score": row.language_score,
-        "organisation_score": row.organisation_score,
+        "dimension_scores": row.dimension_scores,
         "total_score": row.total_score,
         "confidence_level": row.confidence_level,
-        "content_feedback": row.content_feedback,
-        "language_feedback": row.language_feedback,
-        "organisation_feedback": row.organisation_feedback,
         "strengths": row.strengths,
         "weaknesses": row.weaknesses,
         "sentence_level_comments": row.sentence_level_comments,
@@ -130,20 +127,16 @@ def create_marking_result_for_submission(submission: Submission) -> MarkingResul
         sentence_level_comments=[],
         recommended_exercises=[],
         warning_flags=[],
+        dimension_scores=[],
         model_metadata={},
         attempts=0,
     )
 
 
 def apply_ai_payload(row: MarkingResult, payload: dict[str, Any]) -> None:
-    row.content_score = payload["content_score"]
-    row.language_score = payload["language_score"]
-    row.organisation_score = payload["organisation_score"]
+    row.dimension_scores = payload["dimension_scores"]
     row.total_score = payload["total_score"]
     row.confidence_level = payload["confidence_level"]
-    row.content_feedback = payload["content_feedback"]
-    row.language_feedback = payload["language_feedback"]
-    row.organisation_feedback = payload["organisation_feedback"]
     row.strengths = payload["strengths"]
     row.weaknesses = payload["weaknesses"]
     row.sentence_level_comments = payload["sentence_level_comments"]
@@ -220,6 +213,7 @@ async def process_marking_result(
         task_instruction=task.instruction,
         rubric_summary=rubric_summary,
         essay_text=submission.content_text,
+        dimension_names=[str(dimension.name).strip() for dimension in dimensions],
         nlp_metrics={"word_count": submission.word_count, "mode": submission.mode},
     )
 

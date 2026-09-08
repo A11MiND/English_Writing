@@ -91,13 +91,9 @@ def serialize_personal_marking(row: MarkingResult | None) -> dict | None:
     return {
         "id": row.id,
         "status": row.status,
-        "content_score": row.content_score,
-        "language_score": row.language_score,
-        "organisation_score": row.organisation_score,
+        "dimension_scores": row.dimension_scores,
         "total_score": row.total_score,
-        "content_feedback": row.content_feedback,
-        "language_feedback": row.language_feedback,
-        "organisation_feedback": row.organisation_feedback,
+
         "strengths": row.strengths,
         "weaknesses": row.weaknesses,
         "sentence_level_comments": row.sentence_level_comments,

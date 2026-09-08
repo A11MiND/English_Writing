@@ -74,9 +74,7 @@ type TaskForm = {
 };
 
 type ReviewDraft = {
-  content: string;
-  language: string;
-  organisation: string;
+  scores: Record<string, string>;
   notes: string;
 };
 
@@ -291,9 +289,7 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
       return {
         ...current,
         [markingResultId]: {
-          content: existing?.content ?? "",
-          language: existing?.language ?? "",
-          organisation: existing?.organisation ?? "",
+          scores: existing?.scores ?? {},
           notes: existing?.notes ?? "",
           ...patch,
         },
@@ -308,9 +304,7 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
       return {
         ...current,
         [markingResultId]: {
-          content: existing?.content ?? "",
-          language: existing?.language ?? "",
-          organisation: existing?.organisation ?? "",
+          scores: existing?.scores ?? {},
           notes: notes.trim() ? `${notes.trim()}\n\n${message}` : message,
         },
       };
@@ -350,9 +344,9 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
         const result = item.marking_result;
         if (result && !next[result.id]) {
           next[result.id] = {
-            content: String(result.content_score ?? ""),
-            language: String(result.language_score ?? ""),
-            organisation: String(result.organisation_score ?? ""),
+            scores: Object.fromEntries(
+              result.dimension_scores.map((entry) => [entry.name, String(entry.score ?? "")]),
+            ),
             notes: "",
           };
         }
@@ -583,44 +577,29 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
       (item) => item.marking_result?.id === markingResultId,
     );
     if (!reviewItem) return;
-    const scoreMaximum = (name: string) => reviewItem.task.rubric.dimensions.find(
-      (dimension) => dimension.name.toLowerCase() === name.toLowerCase(),
-    )?.max_score;
-    const maxima = {
-      content: scoreMaximum("Content"),
-      language: scoreMaximum("Language"),
-      organisation: scoreMaximum("Organisation"),
-    };
-    const content = Number(draft.content);
-    const language = Number(draft.language);
-    const organisation = Number(draft.organisation);
     setNotice("");
     setError("");
-    const scores = [
-      { label: "Content", value: content, maximum: maxima.content },
-      { label: "Language", value: language, maximum: maxima.language },
-      { label: "Organisation", value: organisation, maximum: maxima.organisation },
-    ];
+    const dimensions = [...reviewItem.task.rubric.dimensions].sort(
+      (a, b) => a.sort_order - b.sort_order,
+    );
+    const scores = dimensions.map((dimension) => ({
+      name: dimension.name,
+      score: Number(draft.scores[dimension.name]),
+      maximum: dimension.max_score,
+    }));
     const invalidScore = scores.find(
-      ({ value, maximum }) => !Number.isInteger(value)
-        || maximum === undefined
-        || value < 0
-        || value > maximum,
+      ({ score, maximum }) => !Number.isInteger(score) || score < 0 || score > maximum,
     );
     if (invalidScore) {
       setError(
-        invalidScore.maximum === undefined
-          ? "This task's rubric is missing a required score category."
-          : `${invalidScore.label} score must be a whole number from 0 to ${invalidScore.maximum}.`,
+        `${invalidScore.name} score must be a whole number from 0 to ${invalidScore.maximum}.`,
       );
       return;
     }
     try {
       const review = await reviewMarking(markingResultId, {
-        content_score: content,
-        language_score: language,
-        organisation_score: organisation,
-        total_score: content + language + organisation,
+        dimension_scores: scores.map(({ name, score }) => ({ name, score })),
+        total_score: scores.reduce((sum, entry) => sum + entry.score, 0),
         review_notes: draft.notes,
         status: "REVIEWED",
       });
@@ -767,31 +746,14 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
   const selectedResult = selectedItem?.marking_result ?? null;
   const selectedDraft = selectedResult ? reviewDrafts[selectedResult.id] : undefined;
   const reportDistributionMax = classReport ? Math.max(1, ...Object.values(classReport.score_distribution)) : 1;
-  const reportRubricRows = classReport
-    ? [
-        {
-          label: "Content",
-          value: classReport.rubric_breakdown.content_average,
-          percentage: classReport.rubric_breakdown.content_average_percentage,
-          maximum: classReport.rubric_breakdown.content_max_score,
-          colour: "sage",
-        },
-        {
-          label: "Language",
-          value: classReport.rubric_breakdown.language_average,
-          percentage: classReport.rubric_breakdown.language_average_percentage,
-          maximum: classReport.rubric_breakdown.language_max_score,
-          colour: "lavender",
-        },
-        {
-          label: "Organisation",
-          value: classReport.rubric_breakdown.organisation_average,
-          percentage: classReport.rubric_breakdown.organisation_average_percentage,
-          maximum: classReport.rubric_breakdown.organisation_max_score,
-          colour: "amber",
-        },
-      ]
-    : [];
+  const rubricRowColours = ["sage", "lavender", "amber", "coral"];
+  const reportRubricRows = (classReport?.rubric_breakdown ?? []).map((entry, index) => ({
+    label: entry.name,
+    value: entry.average,
+    percentage: entry.average_percentage,
+    maximum: entry.max_score,
+    colour: rubricRowColours[index % rubricRowColours.length],
+  }));
   const reportRows = classReport?.completion_rows.slice(0, 12) ?? [];
   const reportTaskTitle = reportTaskId
     ? state.tasks.find((task) => task.id === reportTaskId)?.title ?? "Selected assignment"
@@ -1047,9 +1009,7 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
                     </button>
                   </div>
                   {[
-                    selectedResult.content_feedback,
-                    selectedResult.language_feedback,
-                    selectedResult.organisation_feedback,
+                    ...selectedResult.dimension_scores.map((entry) => entry.feedback ?? ""),
                     ...selectedResult.sentence_level_comments.slice(0, 2).map((comment) => comment.comment),
                   ]
                     .filter(Boolean)
@@ -1098,91 +1058,47 @@ export function TeacherWorkspace({ screen }: { screen: TeacherScreen }) {
               {selectedResult && markingTab === "scores" ? (
                 <div style={{ marginTop: 18 }}>
                   <div className="score-grid">
-                    {[
-                      ["Content", selectedResult.content_score],
-                      ["Language", selectedResult.language_score],
-                      ["Organisation", selectedResult.organisation_score],
-                    ].map(([label, value]) => (
-                      <div key={label} className="score-row">
-                        <span>{label}</span>
+                    {selectedResult.dimension_scores.map((entry) => (
+                      <div key={entry.name} className="score-row">
+                        <span>{entry.name}</span>
                         <span className="bar">
-                          <span style={{ width: scorePercent(value as number | null, 5) }} />
+                          <span style={{ width: scorePercent(entry.score, entry.max_score ?? 5) }} />
                         </span>
-                        <strong>{value ?? "-"}</strong>
+                        <strong>{entry.score ?? "-"}{entry.max_score ? ` / ${entry.max_score}` : ""}</strong>
                       </div>
                     ))}
                   </div>
                   <div className="form-grid" style={{ marginTop: 18 }}>
                     <div className="grid-3">
-                      <input
-                        value={selectedDraft?.content ?? ""}
-                        onChange={(event) =>
-                          setReviewDrafts((current) => ({
-                            ...current,
-                            [selectedResult.id]: {
-                              ...(current[selectedResult.id] ?? {
-                                language: "",
-                                organisation: "",
-                                notes: "",
-                              }),
-                              content: event.target.value,
-                            },
-                          }))
-                        }
-                        className="input"
-                        placeholder="Content"
-                      />
-                      <input
-                        value={selectedDraft?.language ?? ""}
-                        onChange={(event) =>
-                          setReviewDrafts((current) => ({
-                            ...current,
-                            [selectedResult.id]: {
-                              ...(current[selectedResult.id] ?? {
-                                content: "",
-                                organisation: "",
-                                notes: "",
-                              }),
-                              language: event.target.value,
-                            },
-                          }))
-                        }
-                        className="input"
-                        placeholder="Language"
-                      />
-                      <input
-                        value={selectedDraft?.organisation ?? ""}
-                        onChange={(event) =>
-                          setReviewDrafts((current) => ({
-                            ...current,
-                            [selectedResult.id]: {
-                              ...(current[selectedResult.id] ?? {
-                                content: "",
-                                language: "",
-                                notes: "",
-                              }),
-                              organisation: event.target.value,
-                            },
-                          }))
-                        }
-                        className="input"
-                        placeholder="Organisation"
-                      />
+                      {(selectedItem?.task.rubric.dimensions ?? []).map((dimension) => (
+                        <div className="field" key={dimension.id}>
+                          <label htmlFor={`score-${dimension.id}`}>
+                            {dimension.name} (0-{dimension.max_score})
+                          </label>
+                          <input
+                            id={`score-${dimension.id}`}
+                            type="number"
+                            min={dimension.min_score}
+                            max={dimension.max_score}
+                            inputMode="numeric"
+                            value={selectedDraft?.scores[dimension.name] ?? ""}
+                            onChange={(event) =>
+                              updateReviewDraft(selectedResult.id, {
+                                scores: {
+                                  ...(selectedDraft?.scores ?? {}),
+                                  [dimension.name]: event.target.value,
+                                },
+                              })
+                            }
+                            className="input"
+                          />
+                        </div>
+                      ))}
                     </div>
                     <textarea
                       value={selectedDraft?.notes ?? ""}
                       onChange={(event) =>
-                        setReviewDrafts((current) => ({
-                          ...current,
-                          [selectedResult.id]: {
-                            ...(current[selectedResult.id] ?? {
-                              content: "",
-                              language: "",
-                              organisation: "",
-                            }),
-                            notes: event.target.value,
-                          },
-                        }))
+                        updateReviewDraft(selectedResult.id, { notes: event.target.value })
                       }
                       className="textarea"
                       placeholder="Teacher final comment"

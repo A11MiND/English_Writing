@@ -27,27 +27,31 @@ MARKING_SUBMISSION_TEXT = (
 def non_fifteen_rubric() -> SimpleNamespace:
     return SimpleNamespace(
         dimensions=[
-            SimpleNamespace(name="Content", min_score=0, max_score=8),
-            SimpleNamespace(name="Language", min_score=0, max_score=6),
-            SimpleNamespace(name="Organisation", min_score=0, max_score=6),
+            SimpleNamespace(name="Content", min_score=0, max_score=8, sort_order=1),
+            SimpleNamespace(name="Language", min_score=0, max_score=6, sort_order=2),
+            SimpleNamespace(name="Organisation", min_score=0, max_score=6, sort_order=3),
         ]
     )
 
 
 def test_non_fifteen_rubric_validates_teacher_scores_and_normalizes_ai_scores() -> None:
     review = TeacherReviewPayload(
-        content_score=8,
-        language_score=6,
-        organisation_score=6,
+        dimension_scores=[
+            {"name": "Content", "score": 8},
+            {"name": "Language", "score": 6},
+            {"name": "Organisation", "score": 6},
+        ],
         total_score=20,
     )
     validate_teacher_review_scores(review, non_fifteen_rubric())
     with pytest.raises(ApiException):
         validate_teacher_review_scores(
             TeacherReviewPayload(
-                content_score=9,
-                language_score=6,
-                organisation_score=6,
+                dimension_scores=[
+                    {"name": "Content", "score": 9},
+                    {"name": "Language", "score": 6},
+                    {"name": "Organisation", "score": 6},
+                ],
                 total_score=21,
             ),
             non_fifteen_rubric(),
@@ -55,21 +59,22 @@ def test_non_fifteen_rubric_validates_teacher_scores_and_normalizes_ai_scores() 
 
     normalized = normalize_ai_marking_payload(
         {
-            "content_score": 9,
-            "language_score": 5,
-            "organisation_score": 4,
+            "dimension_scores": [
+                {"name": "Content", "score": 9, "feedback": "over the cap"},
+                {"name": "Language", "score": 5, "feedback": "fine"},
+                {"name": "Organisation", "score": 4, "feedback": "fine"},
+            ],
             "total_score": 99,
             "model_metadata": {"provider_request": "test"},
         },
         non_fifteen_rubric().dimensions,
     )
 
-    assert normalized["content_score"] == 8
-    assert normalized["language_score"] == 5
-    assert normalized["organisation_score"] == 4
+    scores = {entry["name"]: entry["score"] for entry in normalized["dimension_scores"]}
+    assert scores == {"Content": 8, "Language": 5, "Organisation": 4}
     assert normalized["total_score"] == 17
     assert normalized["model_metadata"]["rubric_total_score"] == 20
-    assert normalized["model_metadata"]["score_normalization"]["content_score"] == {
+    assert normalized["model_metadata"]["score_normalization"]["Content"] == {
         "provider": 9,
         "normalized": 8,
     }

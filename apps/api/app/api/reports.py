@@ -112,22 +112,22 @@ def summarize_scores(
 
 def score_from_review_or_ai(
     review: TeacherReview | None, marking_result: MarkingResult | None
-) -> tuple[int | None, int | None, int | None, int | None]:
+) -> tuple[dict[str, int], int | None]:
+    """Per-dimension scores keyed by name, preferring the teacher's judgement."""
     if review and review.total_score is not None:
-        return (
-            review.content_score,
-            review.language_score,
-            review.organisation_score,
-            review.total_score,
-        )
-    if marking_result and marking_result.total_score is not None:
-        return (
-            marking_result.content_score,
-            marking_result.language_score,
-            marking_result.organisation_score,
-            marking_result.total_score,
-        )
-    return (None, None, None, None)
+        source = review.dimension_scores or []
+        total = review.total_score
+    elif marking_result and marking_result.total_score is not None:
+        source = marking_result.dimension_scores or []
+        total = marking_result.total_score
+    else:
+        return ({}, None)
+    by_name = {
+        str(entry.get("name", "")).strip(): int(entry["score"])
+        for entry in source
+        if entry.get("name") and entry.get("score") is not None
+    }
+    return (by_name, total)
 
 
 async def build_class_report_payload(
@@ -217,9 +217,8 @@ async def build_class_report_payload(
 
     completion_rows: list[dict] = []
     score_values: list[tuple[int, int]] = []
-    content_scores: list[tuple[int, int]] = []
-    language_scores: list[tuple[int, int]] = []
-    organisation_scores: list[tuple[int, int]] = []
+    dimension_scores: dict[str, list[tuple[int, int]]] = {}
+    dimension_maxima: dict[str, set[int]] = {}
     distribution = Counter(
         {label: 0 for label in score_distribution_labels(distribution_maximum)}
     )
@@ -228,25 +227,21 @@ async def build_class_report_payload(
     for student, profile in students:
         for task in tasks:
             score_limits = score_limits_by_task[task.id]
-            content_maximum = int(score_limits["content_score"]["max_score"])
-            language_maximum = int(score_limits["language_score"]["max_score"])
-            organisation_maximum = int(score_limits["organisation_score"]["max_score"])
             total_maximum = total_maximum_by_task[task.id]
             submission = submissions_by_key.get((student.id, task.id))
             marking = marking_by_submission.get(submission.id) if submission else None
             review = review_by_submission.get(submission.id) if submission else None
-            content, language, organisation, total = score_from_review_or_ai(review, marking)
+            scores_by_name, total = score_from_review_or_ai(review, marking)
             distribution[
                 score_bucket(total, total_maximum, distribution_maximum)
             ] += 1
             if total is not None:
                 score_values.append((total, total_maximum))
-            if content is not None:
-                content_scores.append((content, content_maximum))
-            if language is not None:
-                language_scores.append((language, language_maximum))
-            if organisation is not None:
-                organisation_scores.append((organisation, organisation_maximum))
+            for name, limit in score_limits.items():
+                dimension_maxima.setdefault(name, set()).add(int(limit["max_score"]))
+                value = scores_by_name.get(name)
+                if value is not None:
+                    dimension_scores.setdefault(name, []).append((value, int(limit["max_score"])))
             if marking:
                 for weakness in marking.weaknesses:
                     if isinstance(weakness, str) and weakness.strip():
@@ -262,13 +257,15 @@ async def build_class_report_payload(
                     "submitted": submission is not None,
                     "submitted_at": submission.submitted_at.isoformat() if submission else None,
                     "word_count": submission.word_count if submission else None,
-                    "content_score": content,
-                    "language_score": language,
-                    "organisation_score": organisation,
+                    "dimension_scores": [
+                        {
+                            "name": name,
+                            "score": scores_by_name.get(name),
+                            "max_score": int(limit["max_score"]),
+                        }
+                        for name, limit in score_limits.items()
+                    ],
                     "total_score": total,
-                    "content_max_score": content_maximum,
-                    "language_max_score": language_maximum,
-                    "organisation_max_score": organisation_maximum,
                     "total_max_score": total_maximum,
                     "rubric_id": task.rubric.id,
                     "rubric_title": task.rubric.title,
@@ -282,47 +279,20 @@ async def build_class_report_payload(
     average_total, average_total_percentage = summarize_scores(
         score_values, distribution_maximum
     )
-    content_maxima = {
-        int(limits["content_score"]["max_score"])
-        for limits in score_limits_by_task.values()
-    }
-    language_maxima = {
-        int(limits["language_score"]["max_score"])
-        for limits in score_limits_by_task.values()
-    }
-    organisation_maxima = {
-        int(limits["organisation_score"]["max_score"])
-        for limits in score_limits_by_task.values()
-    }
-    common_content_maximum = (
-        next(iter(content_maxima)) if len(content_maxima) == 1 else None
-    )
-    common_language_maximum = (
-        next(iter(language_maxima)) if len(language_maxima) == 1 else None
-    )
-    common_organisation_maximum = (
-        next(iter(organisation_maxima)) if len(organisation_maxima) == 1 else None
-    )
-    content_average, content_average_percentage = summarize_scores(
-        content_scores, common_content_maximum
-    )
-    language_average, language_average_percentage = summarize_scores(
-        language_scores, common_language_maximum
-    )
-    organisation_average, organisation_average_percentage = summarize_scores(
-        organisation_scores, common_organisation_maximum
-    )
-    rubric_breakdown = {
-        "content_average": content_average,
-        "content_average_percentage": content_average_percentage,
-        "content_max_score": common_content_maximum,
-        "language_average": language_average,
-        "language_average_percentage": language_average_percentage,
-        "language_max_score": common_language_maximum,
-        "organisation_average": organisation_average,
-        "organisation_average_percentage": organisation_average_percentage,
-        "organisation_max_score": common_organisation_maximum,
-    }
+    rubric_breakdown = []
+    for name, maxima in dimension_maxima.items():
+        common_maximum = next(iter(maxima)) if len(maxima) == 1 else None
+        average, average_percentage = summarize_scores(
+            dimension_scores.get(name, []), common_maximum
+        )
+        rubric_breakdown.append(
+            {
+                "name": name,
+                "average": average,
+                "average_percentage": average_percentage,
+                "max_score": common_maximum,
+            }
+        )
 
     latest_report = await db.execute(
         select(ClassReport)
@@ -417,33 +387,45 @@ async def generate_teacher_class_report(
 
 
 def class_report_to_csv(payload: dict) -> str:
+    rows = payload["completion_rows"]
+    # One score pair per rubric dimension, in the order the rubric defines them.
+    dimension_names: list[str] = []
+    for row in rows:
+        for entry in row.get("dimension_scores", []):
+            if entry["name"] not in dimension_names:
+                dimension_names.append(entry["name"])
+
+    base_fields = [
+        "student_number",
+        "student_name",
+        "task_title",
+        "mode",
+        "submitted",
+        "submitted_at",
+        "word_count",
+    ]
+    dimension_fields = [
+        field
+        for name in dimension_names
+        for field in (f"{name} score", f"{name} max score")
+    ]
+    tail_fields = [
+        "total_score",
+        "total_max_score",
+        "rubric_title",
+        "review_status",
+        "marking_status",
+    ]
+
     output = StringIO()
-    writer = csv.DictWriter(
-        output,
-        fieldnames=[
-            "student_number",
-            "student_name",
-            "task_title",
-            "mode",
-            "submitted",
-            "submitted_at",
-            "word_count",
-            "content_score",
-            "content_max_score",
-            "language_score",
-            "language_max_score",
-            "organisation_score",
-            "organisation_max_score",
-            "total_score",
-            "total_max_score",
-            "rubric_title",
-            "review_status",
-            "marking_status",
-        ],
-    )
+    writer = csv.DictWriter(output, fieldnames=base_fields + dimension_fields + tail_fields)
     writer.writeheader()
-    for row in payload["completion_rows"]:
-        writer.writerow({field: sanitize_csv_cell(row.get(field)) for field in writer.fieldnames})
+    for row in rows:
+        flat = {field: row.get(field) for field in base_fields + tail_fields}
+        for entry in row.get("dimension_scores", []):
+            flat[f"{entry['name']} score"] = entry.get("score")
+            flat[f"{entry['name']} max score"] = entry.get("max_score")
+        writer.writerow({field: sanitize_csv_cell(flat.get(field)) for field in writer.fieldnames})
     return output.getvalue()
 
 
@@ -621,28 +603,16 @@ def build_class_report_pdf(payload: dict, generated_at: str) -> bytes:
         pdf_text(overview, x + 11, 604, value, size=18, bold=True, colour=PDF_NAVY)
 
     pdf_text(overview, 42, 548, "Rubric breakdown", size=17, bold=True, colour=PDF_NAVY)
+    dimension_palette = [PDF_SAGE, PDF_PURPLE, PDF_AMBER, PDF_CORAL, PDF_NAVY]
     rubric_rows = [
         (
-            "Content",
-            rubric["content_average"],
-            rubric["content_average_percentage"],
-            rubric["content_max_score"],
-            PDF_SAGE,
-        ),
-        (
-            "Language",
-            rubric["language_average"],
-            rubric["language_average_percentage"],
-            rubric["language_max_score"],
-            PDF_PURPLE,
-        ),
-        (
-            "Organisation",
-            rubric["organisation_average"],
-            rubric["organisation_average_percentage"],
-            rubric["organisation_max_score"],
-            PDF_AMBER,
-        ),
+            entry["name"],
+            entry["average"],
+            entry["average_percentage"],
+            entry["max_score"],
+            dimension_palette[index % len(dimension_palette)],
+        )
+        for index, entry in enumerate(rubric)
     ]
     for index, (label, value, percentage, maximum, colour) in enumerate(rubric_rows):
         y = 514 - (index * 42)

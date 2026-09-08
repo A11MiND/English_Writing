@@ -85,12 +85,14 @@ export function StudentFeedback({ submissionId }: { submissionId: string }) {
   const { feedback } = state;
   const review = feedback.review;
   const marking = feedback.marking_result;
-  const scoreRows = [
-    ["Content", review.content_score ?? marking.content_score],
-    ["Language", review.language_score ?? marking.language_score],
-    ["Organisation", review.organisation_score ?? marking.organisation_score],
-    ["Total", review.total_score ?? marking.total_score],
-  ] as const;
+  // The teacher's scores win where they exist; the AI result fills the rest.
+  const reviewScores = new Map(review.dimension_scores.map((entry) => [entry.name, entry.score]));
+  const scoreRows: Array<readonly [string, number | null]> = [
+    ...marking.dimension_scores.map(
+      (entry) => [entry.name, reviewScores.get(entry.name) ?? entry.score] as const,
+    ),
+    ["Total", review.total_score ?? marking.total_score] as const,
+  ];
 
   return (
     <ProductTopNav
@@ -142,22 +144,18 @@ export function StudentFeedback({ submissionId }: { submissionId: string }) {
             <div className="panel-header">
               <div>
                 <h2 className="panel-title">Teacher feedback</h2>
-                <p className="panel-subtitle">Your teacher’s final comments, organised into three useful parts.</p>
+                <p className="panel-subtitle">Your teacher’s final comments, one part at a time.</p>
               </div>
             </div>
             <div className="suggestion-list">
-              <div className="rubric-item">
-                <strong>Content</strong>
-                <p className="panel-subtitle">{marking.content_feedback ?? "No content comment released."}</p>
-              </div>
-              <div className="rubric-item">
-                <strong>Language</strong>
-                <p className="panel-subtitle">{marking.language_feedback ?? "No language comment released."}</p>
-              </div>
-              <div className="rubric-item">
-                <strong>Organisation</strong>
-                <p className="panel-subtitle">{marking.organisation_feedback ?? "No organisation comment released."}</p>
-              </div>
+              {marking.dimension_scores.map((dimension) => (
+                <div className="rubric-item" key={dimension.name}>
+                  <strong>{dimension.name}</strong>
+                  <p className="panel-subtitle">
+                    {dimension.feedback || `No ${dimension.name.toLowerCase()} comment released.`}
+                  </p>
+                </div>
+              ))}
               {review.review_notes ? (
                 <div className="rubric-item">
                   <span className="badge-success">Teacher note</span>

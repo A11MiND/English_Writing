@@ -36,19 +36,21 @@ from app.services.marking import (
 router = APIRouter(prefix="/api", tags=["marking"])
 
 
+class TeacherDimensionScore(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    score: int = Field(ge=0)
+
+
 class TeacherReviewPayload(BaseModel):
-    content_score: int | None = Field(default=None, ge=0)
-    language_score: int | None = Field(default=None, ge=0)
-    organisation_score: int | None = Field(default=None, ge=0)
+    dimension_scores: list[TeacherDimensionScore] = Field(default_factory=list)
     total_score: int | None = Field(default=None, ge=0)
     review_notes: str | None = Field(default=None, max_length=5000)
     status: str = Field(default="REVIEWED", pattern="^(DRAFT|REVIEWED|RELEASE_READY)$")
 
     @model_validator(mode="after")
     def validate_total(self) -> "TeacherReviewPayload":
-        scores = [self.content_score, self.language_score, self.organisation_score]
-        if all(score is not None for score in scores):
-            calculated_total = sum(score or 0 for score in scores)
+        if self.dimension_scores:
+            calculated_total = sum(entry.score for entry in self.dimension_scores)
             if self.total_score is None:
                 self.total_score = calculated_total
             elif self.total_score != calculated_total:
@@ -56,32 +58,32 @@ class TeacherReviewPayload(BaseModel):
         return self
 
 
-def validate_teacher_review_scores(payload: TeacherReviewPayload, rubric: Rubric) -> None:
+def validate_teacher_review_scores(payload: TeacherReviewPayload, rubric: Rubric) -> list[dict]:
+    """Check the teacher's scores against the rubric and return them in rubric order."""
     limits = rubric_score_limits(rubric.dimensions)
-    scores = {
-        "content_score": payload.content_score,
-        "language_score": payload.language_score,
-        "organisation_score": payload.organisation_score,
-    }
-    provided_scores = [score for score in scores.values() if score is not None]
-    if provided_scores and len(provided_scores) != len(scores):
+    if not payload.dimension_scores:
+        return []
+
+    provided = {entry.name.strip().casefold(): entry for entry in payload.dimension_scores}
+    missing = [name for name in limits if name.casefold() not in provided]
+    if missing:
         raise ApiException(
             ErrorCode.VALIDATION_ERROR,
-            "Content, Language and Organisation scores must be provided together.",
+            f"Scores for every rubric dimension are required together. Missing: {', '.join(missing)}.",
             422,
         )
-    for score_field, score in scores.items():
-        if score is None:
-            continue
-        limit = limits[score_field]
-        minimum = int(limit["min_score"])
-        maximum = int(limit["max_score"])
-        if score < minimum or score > maximum:
+
+    scored: list[dict] = []
+    for name, limit in limits.items():
+        score = provided[name.casefold()].score
+        if score < limit["min_score"] or score > limit["max_score"]:
             raise ApiException(
                 ErrorCode.VALIDATION_ERROR,
-                f"{limit['name']} score must be between {minimum} and {maximum}.",
+                f"{name} score must be between {limit['min_score']} and {limit['max_score']}.",
                 422,
             )
+        scored.append({"name": name, "score": score, "max_score": limit["max_score"]})
+
     if payload.total_score is not None:
         maximum_total = rubric_total_score(limits)
         if payload.total_score > maximum_total:
@@ -90,6 +92,7 @@ def validate_teacher_review_scores(payload: TeacherReviewPayload, rubric: Rubric
                 f"Total score must be between 0 and {maximum_total}.",
                 422,
             )
+    return scored
 
 
 def serialize_submission_for_marking(
@@ -391,7 +394,7 @@ async def review_teacher_marking_result(
     marking_result, submission, _, rubric, _ = await teacher_marking_context(
         db, user, marking_result_id
     )
-    validate_teacher_review_scores(payload, rubric)
+    scored_dimensions = validate_teacher_review_scores(payload, rubric)
     existing_result = await db.execute(
         select(TeacherReview).where(
             TeacherReview.school_id == user.school_id,
@@ -408,9 +411,7 @@ async def review_teacher_marking_result(
         )
         db.add(review)
 
-    review.content_score = payload.content_score
-    review.language_score = payload.language_score
-    review.organisation_score = payload.organisation_score
+    review.dimension_scores = scored_dimensions
     review.total_score = payload.total_score
     review.review_notes = payload.review_notes
     review.status = payload.status
@@ -424,9 +425,7 @@ async def review_teacher_marking_result(
         {
             "marking_result_id": marking_result.id,
             "submission_id": submission.id,
-            "content_score": payload.content_score,
-            "language_score": payload.language_score,
-            "organisation_score": payload.organisation_score,
+            "dimension_scores": scored_dimensions,
             "total_score": payload.total_score,
         },
     )
@@ -445,9 +444,7 @@ def serialize_teacher_review(row: TeacherReview) -> dict:
         "id": row.id,
         "marking_result_id": row.marking_result_id,
         "submission_id": row.submission_id,
-        "content_score": row.content_score,
-        "language_score": row.language_score,
-        "organisation_score": row.organisation_score,
+        "dimension_scores": row.dimension_scores,
         "total_score": row.total_score,
         "review_notes": row.review_notes,
         "status": row.status,
@@ -478,13 +475,8 @@ def serialize_released_student_marking(row: MarkingResult) -> dict:
         "task_id": row.task_id,
         "student_id": row.student_id,
         "status": row.status,
-        "content_score": row.content_score,
-        "language_score": row.language_score,
-        "organisation_score": row.organisation_score,
+        "dimension_scores": row.dimension_scores,
         "total_score": row.total_score,
-        "content_feedback": row.content_feedback,
-        "language_feedback": row.language_feedback,
-        "organisation_feedback": row.organisation_feedback,
         "strengths": row.strengths,
         "weaknesses": row.weaknesses,
         "sentence_level_comments": row.sentence_level_comments,
@@ -519,9 +511,10 @@ async def release_teacher_feedback(
             marking_result_id=marking_result_id,
             submission_id=submission.id,
             teacher_id=user.id,
-            content_score=marking_result.content_score,
-            language_score=marking_result.language_score,
-            organisation_score=marking_result.organisation_score,
+            dimension_scores=[
+                {k: entry[k] for k in ("name", "score", "max_score") if k in entry}
+                for entry in (marking_result.dimension_scores or [])
+            ],
             total_score=marking_result.total_score,
         )
         db.add(review)

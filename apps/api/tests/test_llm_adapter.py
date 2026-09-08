@@ -20,14 +20,13 @@ from app.services.llm import (
 
 def valid_marking_payload() -> dict[str, object]:
     return {
-        "content_score": 5,
-        "language_score": 4,
-        "organisation_score": 4,
+        "dimension_scores": [
+            {"name": "Content", "score": 5, "feedback": "Ideas are relevant and developed."},
+            {"name": "Language", "score": 4, "feedback": "Language is accurate with minor issues."},
+            {"name": "Organisation", "score": 4, "feedback": "The writing is logically ordered."},
+        ],
         "total_score": 13,
         "confidence_level": "HIGH",
-        "content_feedback": "Ideas are relevant and developed.",
-        "language_feedback": "Language is accurate with minor issues.",
-        "organisation_feedback": "The writing is logically ordered.",
         "strengths": ["Clear topic focus"],
         "weaknesses": ["Add richer vocabulary"],
         "sentence_level_comments": [

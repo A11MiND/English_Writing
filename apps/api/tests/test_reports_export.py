@@ -135,17 +135,11 @@ def test_pdf_export_builds_visual_summary_and_paginated_student_table() -> None:
             "maximum_total_score": 15,
             "student_count": 30,
         },
-        "rubric_breakdown": {
-            "content_average": 4.0,
-            "content_average_percentage": 80.0,
-            "content_max_score": 5,
-            "language_average": 3.4,
-            "language_average_percentage": 68.0,
-            "language_max_score": 5,
-            "organisation_average": 4.2,
-            "organisation_average_percentage": 84.0,
-            "organisation_max_score": 5,
-        },
+        "rubric_breakdown": [
+            {"name": "Content", "average": 4.0, "average_percentage": 80.0, "max_score": 5},
+            {"name": "Language", "average": 3.4, "average_percentage": 68.0, "max_score": 5},
+            {"name": "Organisation", "average": 4.2, "average_percentage": 84.0, "max_score": 5},
+        ],
         "common_weaknesses": [
             {"weakness": "Past tense", "count": 8},
             {"weakness": "Word choice", "count": 5},
@@ -184,17 +178,11 @@ def test_non_fifteen_score_distribution_and_pdf_labels_use_rubric_maximum() -> N
             "maximum_total_score": 20,
             "student_count": 1,
         },
-        "rubric_breakdown": {
-            "content_average": 7,
-            "content_average_percentage": 87.5,
-            "content_max_score": 8,
-            "language_average": 5,
-            "language_average_percentage": 83.33,
-            "language_max_score": 6,
-            "organisation_average": 5,
-            "organisation_average_percentage": 83.33,
-            "organisation_max_score": 6,
-        },
+        "rubric_breakdown": [
+            {"name": "Content", "average": 7, "average_percentage": 87.5, "max_score": 8},
+            {"name": "Language", "average": 5, "average_percentage": 83.33, "max_score": 6},
+            {"name": "Organisation", "average": 5, "average_percentage": 83.33, "max_score": 6},
+        ],
         "common_weaknesses": [],
         "completion_rows": [
             {

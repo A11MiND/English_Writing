@@ -22,17 +22,20 @@ class RecommendedExercise(BaseModel):
     prompt: str = Field(min_length=1)
 
 
+class DimensionScore(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    score: int = Field(ge=0)
+    feedback: str = Field(min_length=1)
+
+
 class AIMarkingOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    content_score: int = Field(ge=0)
-    language_score: int = Field(ge=0)
-    organisation_score: int = Field(ge=0)
+    dimension_scores: list[DimensionScore] = Field(min_length=1)
     total_score: int = Field(ge=0)
     confidence_level: Literal["LOW", "MEDIUM", "HIGH"]
-    content_feedback: str = Field(min_length=1)
-    language_feedback: str = Field(min_length=1)
-    organisation_feedback: str = Field(min_length=1)
     strengths: list[str] = Field(min_length=1)
     weaknesses: list[str] = Field(min_length=1)
     sentence_level_comments: list[SentenceLevelComment]
