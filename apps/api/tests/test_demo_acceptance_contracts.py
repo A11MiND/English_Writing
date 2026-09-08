@@ -342,6 +342,56 @@ async def test_student_rewrite_preserves_pupil_text_boundary_and_returns_one_cha
     )
 
 
+def test_rewrite_request_rejects_an_essay_length_selection() -> None:
+    # "Rewrite" is meant for a sentence or two. A whole draft used to be
+    # accepted, get sent to the model as if it were "a short passage", and
+    # come back as commentary instead of a rewrite - which then got inserted
+    # into the draft verbatim. Bounded at the request boundary so that whole
+    # class of failure can't reach the model at all.
+    essay = "This sentence is repeated many times to build up length. " * 10
+    assert len(essay) > 400
+
+    with pytest.raises(ValueError):
+        student_ai_api.RewriteRequest(task_id=TASK_ID, text=essay, goal="MORE_DESCRIPTIVE")
+
+
+@pytest.mark.asyncio
+async def test_rewrite_rejects_a_reply_shaped_like_analysis_instead_of_a_rewrite(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task = personal_task()
+    # A short pupil sentence in, but the model answers with a long structured
+    # analysis instead of a short rewrite - reproduces what actually reached
+    # the editor and got spliced into a pupil's draft.
+    analysis = (
+        "Error Breakdown and Analysis. Grammar and Tense Consistency: shifts between "
+        "past and present tense throughout the passage are visible in several places. "
+        "Subject-Verb Agreement: several mismatches between singular and plural forms "
+        "appear across the sentences that were provided for review here today."
+    )
+    adapter = StubLlmAdapter({"revised": analysis, "explanation": "Fixed the tense."})
+
+    async def task_context(*_args: Any) -> tuple[None, WritingTask, None]:
+        return None, task, None
+
+    async def adapter_for_school(*_args: Any) -> StubLlmAdapter:
+        return adapter
+
+    monkeypatch.setattr(student_ai_api, "student_task_context", task_context)
+    monkeypatch.setattr(student_ai_api, "get_school_llm_adapter", adapter_for_school)
+    monkeypatch.setattr(student_ai_api, "write_audit_log", no_audit)
+    db = FakeDb()
+    original = "The puppy was near the gate."
+
+    with pytest.raises(ApiException):
+        await student_ai_api.rewrite_student_text(
+            student_ai_api.RewriteRequest(task_id=TASK_ID, text=original, goal="MORE_DESCRIPTIVE"),
+            make_request("/api/student/rewrite"),
+            student_user(),
+            db,  # type: ignore[arg-type]
+        )
+
+
 @pytest.mark.asyncio
 async def test_teacher_creates_pupil_in_an_assigned_class_without_calling_real_identity_service(
     monkeypatch: pytest.MonkeyPatch,

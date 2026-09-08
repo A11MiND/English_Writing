@@ -129,6 +129,29 @@ function canAnalyseParagraph(text: string) {
   return sentences.length >= 3 && countWords(text) >= 20;
 }
 
+// Must match the API's RewriteRequest.text max_length: "rewrite" means a
+// sentence, not a whole draft, and both ends of the request need to agree
+// on that or a long selection reaches the model and comes back as
+// commentary instead of a rewrite.
+const REWRITE_MAX_CHARS = 400;
+
+/** The sentence (trimmed) that contains `offset` within `text`, with its trimmed start/end in `text`. */
+function sentenceAroundOffset(text: string, offset: number): { text: string; start: number; end: number } | null {
+  const sentencePattern = /[^.!?]+[.!?]+|[^.!?]+$/g;
+  let match: RegExpExecArray | null;
+  while ((match = sentencePattern.exec(text)) !== null) {
+    const rawStart = match.index;
+    const rawEnd = rawStart + match[0].length;
+    if (offset < rawStart || offset > rawEnd) continue;
+    const trimmed = match[0].trim();
+    if (!trimmed) return null;
+    const leading = match[0].length - match[0].trimStart().length;
+    const start = rawStart + leading;
+    return { text: trimmed, start, end: start + trimmed.length };
+  }
+  return null;
+}
+
 export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -165,7 +188,7 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
   const [rewriteState, setRewriteState] = useState<RewriteState>("idle");
   const [rewrite, setRewrite] = useState<StudentRewrite | null>(null);
   const [rewriteError, setRewriteError] = useState("");
-  const rewriteRangeRef = useRef<{ from: number; to: number } | null>(null);
+  const rewriteRangeRef = useRef<{ from: number; to: number; text: string } | null>(null);
 
   function showToast(message: string) {
     setToast(message);
@@ -563,13 +586,20 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
 
   function acceptSuggestion(suggestion: DisplaySuggestion, replacement: string) {
     if (!editor || locked) return;
-    editor.commands.insertContentAt(
-      {
-        from: suggestion.offset + 1,
-        to: suggestion.offset + suggestion.length + 1,
-      },
-      replacement,
-    );
+    const from = suggestion.offset + 1;
+    const to = suggestion.offset + suggestion.length + 1;
+    // The suggestion's position was computed against a snapshot of the text; the
+    // document can have changed since (typing, another suggestion applied, ...).
+    // Applying at a stale position silently corrupts unrelated text, so refuse
+    // rather than guess if what's there no longer matches what was checked.
+    const currentText = editor.state.doc.textBetween(from, to, " ");
+    if (currentText !== suggestion.sourceText) {
+      removeSuggestion(suggestion.id);
+      showToast("That suggestion is out of date. Checking your writing again…");
+      checkAllLanguage();
+      return;
+    }
+    editor.commands.insertContentAt({ from, to }, replacement);
     removeSuggestion(suggestion.id);
     setOverviewStale(true);
   }
@@ -594,10 +624,17 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
       const text = editor.state.doc.textBetween(from, to, " ").trim();
       return text ? { text, from, to } : null;
     }
+    // No selection: use the sentence under the cursor, not the whole paragraph.
+    // A "rewrite" is meant to cover a sentence or two - handing the model an
+    // entire draft asked it to rewrite an essay as if it were one sentence,
+    // and it answered with an analysis instead, which then got inserted
+    // verbatim in place of the draft.
     const paragraphFrom = $from.start();
     const paragraphTo = $from.end();
-    const paragraph = editor.state.doc.textBetween(paragraphFrom, paragraphTo, " ").trim();
-    return paragraph ? { text: paragraph, from: paragraphFrom, to: paragraphTo } : null;
+    const paragraph = editor.state.doc.textBetween(paragraphFrom, paragraphTo, " ");
+    const sentence = sentenceAroundOffset(paragraph, $from.pos - paragraphFrom);
+    if (!sentence) return null;
+    return { text: sentence.text, from: paragraphFrom + sentence.start, to: paragraphFrom + sentence.end };
   }
 
   async function runRewrite() {
@@ -608,10 +645,14 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
       editor.commands.focus();
       return;
     }
+    if (target.text.length > REWRITE_MAX_CHARS) {
+      showToast("That's too long for Pip to rewrite at once. Select one sentence instead.");
+      return;
+    }
     setRewriteState("loading");
     setRewriteError("");
     setRewrite(null);
-    rewriteRangeRef.current = { from: target.from, to: target.to };
+    rewriteRangeRef.current = { from: target.from, to: target.to, text: target.text };
     try {
       const result = await rewriteStudentText({ task_id: taskId, text: target.text, goal: rewriteGoal });
       setRewrite(result);
@@ -624,7 +665,19 @@ export function WritingEditor({ taskId, expectedMode }: WritingEditorProps) {
 
   function applyRewrite() {
     if (!editor || !rewrite || !rewriteRangeRef.current || locked) return;
-    editor.commands.insertContentAt(rewriteRangeRef.current, rewrite.revised);
+    const { from, to, text } = rewriteRangeRef.current;
+    // Same staleness guard as accepting a grammar suggestion: the draft can have
+    // changed while Pip's rewrite was loading (kept typing, tried another goal,
+    // undid something). Refuse rather than splice the rewrite into the wrong text.
+    const currentText = editor.state.doc.textBetween(from, to, " ");
+    if (currentText !== text) {
+      setRewrite(null);
+      setRewriteState("idle");
+      rewriteRangeRef.current = null;
+      showToast("Your draft changed since this suggestion was made, so it was not applied.");
+      return;
+    }
+    editor.commands.insertContentAt({ from, to }, rewrite.revised);
     setRewrite(null);
     setRewriteState("idle");
     rewriteRangeRef.current = null;

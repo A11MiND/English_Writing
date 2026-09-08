@@ -70,7 +70,12 @@ class GeneratePersonalPracticeRequest(BaseModel):
 
 class RewriteRequest(BaseModel):
     task_id: str = Field(min_length=36, max_length=36)
-    text: str = Field(min_length=3, max_length=2_000)
+    # "Rewrite" means one sentence or two, not a whole essay - the LLM was asked
+    # for a short passage but a longer selection (a whole draft, no less) got
+    # through and it answered with a full analysis instead of a rewrite, which
+    # then got spliced into the pupil's draft verbatim. Bounded here so a essay
+    # -length selection is rejected before it ever reaches the model.
+    text: str = Field(min_length=3, max_length=400)
     goal: RewriteGoal
 
     @field_validator("text")
@@ -490,6 +495,15 @@ async def rewrite_student_text(
     explanation = str(response.json_data.get("explanation") or "").strip()
     if not revised or not explanation:
         raise ApiException(ErrorCode.VALIDATION_ERROR, "Rewrite did not match the required format.", 422)
+    # A genuine rewrite of a short passage stays roughly the same size. A reply several
+    # times longer is a sign the model answered with commentary/analysis instead of a
+    # rewrite - that must never be handed back for the editor to insert as "the rewrite".
+    if len(revised) > len(payload.text) * 3 + 120:
+        raise ApiException(
+            ErrorCode.VALIDATION_ERROR,
+            "Pip's answer did not look like a short rewrite, so it was not applied. Try again with a shorter selection.",
+            422,
+        )
 
     db.add(
         AIUsageLog(
