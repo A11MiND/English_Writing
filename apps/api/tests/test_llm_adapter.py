@@ -15,6 +15,7 @@ from app.services.llm import (
     PROVIDER_PRESETS,
     build_ai_marking_messages,
     get_llm_adapter,
+    strip_non_json_wrapping,
 )
 
 
@@ -125,6 +126,59 @@ async def test_openai_compatible_adapter_rejects_invalid_ai_json() -> None:
             await adapter.generate_json(
                 LLMGenerationRequest(messages=[LLMMessage(role="user", content="Mark this writing.")])
             )
+
+
+def test_strip_non_json_wrapping_removes_reasoning_model_think_block() -> None:
+    # MiniMax-M3 and similar reasoning models prepend a <think> block before
+    # the actual answer even when told to return JSON only.
+    content = (
+        '<think>The user wants JSON. I should just output the raw JSON.</think>\n\n'
+        '{"ok": true, "value": 42}'
+    )
+
+    assert strip_non_json_wrapping(content) == '{"ok": true, "value": 42}'
+
+
+def test_strip_non_json_wrapping_removes_markdown_code_fence() -> None:
+    content = '```json\n{"ok": true}\n```'
+
+    assert strip_non_json_wrapping(content) == '{"ok": true}'
+
+
+def test_strip_non_json_wrapping_leaves_plain_json_untouched() -> None:
+    content = '{"ok": true}'
+
+    assert strip_non_json_wrapping(content) == '{"ok": true}'
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_adapter_strips_reasoning_model_think_block() -> None:
+    async def handler(_: httpx.Request) -> httpx.Response:
+        wrapped = (
+            "<think>Reasoning about the rubric before answering.</think>\n\n"
+            f"{json.dumps(valid_marking_payload())}"
+        )
+        return httpx.Response(
+            status_code=200,
+            json={"choices": [{"message": {"content": wrapped}}]},
+        )
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        adapter = OpenAICompatibleLLMAdapter(
+            provider="minimax",
+            model="MiniMax-M3",
+            base_url="https://example.test",
+            api_key="test-key",
+            timeout_seconds=1,
+            client=client,
+        )
+
+        response = await adapter.generate_json(
+            LLMGenerationRequest(messages=[LLMMessage(role="user", content="Mark this writing.")])
+        )
+
+    assert response.json_data["total_score"] == 13
 
 
 def test_get_llm_adapter_requires_api_key_for_real_provider() -> None:

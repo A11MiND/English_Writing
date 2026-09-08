@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Literal, Protocol
 
 import httpx
@@ -106,6 +107,23 @@ class LLMAdapter(Protocol):
         """Generate schema-bound JSON text and return validated parsed data."""
 
 
+_THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+_CODE_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
+
+
+def strip_non_json_wrapping(content: str) -> str:
+    """Undo the formatting reasoning models add around their JSON answer.
+
+    MiniMax-M3 (and other reasoning models such as DeepSeek-R1) prepend a
+    <think>...</think> block before the actual answer even when told to
+    return JSON only. Some providers also wrap the answer in a markdown
+    code fence. Both are stripped here rather than in every call site.
+    """
+    stripped = _THINK_BLOCK.sub("", content).strip()
+    stripped = _CODE_FENCE.sub("", stripped).strip()
+    return stripped
+
+
 class OpenAICompatibleLLMAdapter:
     def __init__(
         self,
@@ -188,7 +206,7 @@ class OpenAICompatibleLLMAdapter:
 
     def _parse_and_validate_json(self, content: str, schema_name: str) -> dict[str, Any]:
         try:
-            parsed = json.loads(content)
+            parsed = json.loads(strip_non_json_wrapping(content))
         except json.JSONDecodeError as exc:
             raise LLMResponseValidationError("LLM output was not valid JSON") from exc
         if not isinstance(parsed, dict):
